@@ -38,7 +38,7 @@ func (s *SecureConn) Read(p []byte) (int, error) {
 	if _, err := io.ReadFull(s.conn, lengthBuf); err != nil {
 		return 0, err
 	}
-	length := int(lengthBuf[0])<<1 | int(lengthBuf[1])
+	length := int(lengthBuf[0])<<8 | int(lengthBuf[1])
 
 	cipherText := make([]byte, length)
 	if _, err := io.ReadFull(s.conn, cipherText); err != nil {
