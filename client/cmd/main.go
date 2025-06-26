@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/config"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/socks5"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/logger"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"

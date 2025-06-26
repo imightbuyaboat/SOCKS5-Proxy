@@ -3,7 +3,7 @@ package socks5
 import (
 	"net"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/config"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
 	"go.uber.org/zap"
 )
 
