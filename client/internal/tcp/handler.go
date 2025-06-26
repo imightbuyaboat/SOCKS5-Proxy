@@ -1,14 +1,14 @@
-package socks5
+package tcp
 
 import (
 	"io"
 	"net"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/tcp"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/socks5"
 	"go.uber.org/zap"
 )
 
-func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
+func (s *SOCKS5ListenerTCP) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	buf := make([]byte, 512)
@@ -27,7 +27,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	if err = parseHandshake(buf); err != nil {
+	if err = socks5.ParseHandshake(buf); err != nil {
 		s.logger.Error("failed to parse handshake request",
 			zap.String("address", conn.RemoteAddr().String()),
 			zap.Error(err))
@@ -50,7 +50,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	targetAddr, err := parseConnectRequest(buf)
+	targetAddr, err := socks5.ParseConnectRequest(buf)
 	if err != nil {
 		sendReply(conn, 0x01)
 		s.logger.Error("failed to parse connect request",
@@ -60,7 +60,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	}
 
 	// подключение к прокси-серверу
-	remoteConn, err := tcp.CreateRemoteTCPConnection(s.config.RemoteTCPAddress, targetAddr, s.config.Key)
+	remoteConn, err := createRemoteTCPConnection(s.config.RemoteTCPAddress, targetAddr, s.config.Key)
 	if err != nil {
 		sendReply(conn, 0x01)
 		s.logger.Error("failed to create remote connection",
@@ -70,6 +70,9 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 	defer remoteConn.Close()
+
+	s.logger.Info("successfully create remote connection",
+		zap.String("remote_tcp_address", s.config.RemoteTCPAddress))
 
 	sendReply(conn, 0x00) // успешное подключение к прокси-серверу
 

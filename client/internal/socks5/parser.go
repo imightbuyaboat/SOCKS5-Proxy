@@ -5,7 +5,7 @@ import (
 	"net"
 )
 
-func parseHandshake(req []byte) error {
+func ParseHandshake(req []byte) error {
 	ver := req[0]
 	nMethods := int(req[1])
 
@@ -32,7 +32,7 @@ func parseHandshake(req []byte) error {
 	return nil
 }
 
-func parseConnectRequest(req []byte) (string, error) {
+func ParseConnectRequest(req []byte) (string, error) {
 	ver := req[0]
 	cmd := req[1]
 	atyp := req[3]

@@ -1,4 +1,4 @@
-package socks5
+package tcp
 
 import (
 	"net"
@@ -7,19 +7,19 @@ import (
 	"go.uber.org/zap"
 )
 
-type SOCKS5Listener struct {
+type SOCKS5ListenerTCP struct {
 	config *config.Config
 	logger *zap.Logger
 }
 
-func NewSOCKS5Listener(config *config.Config, logger *zap.Logger) *SOCKS5Listener {
-	return &SOCKS5Listener{
+func NewSOCKS5ListenerTCP(config *config.Config, logger *zap.Logger) *SOCKS5ListenerTCP {
+	return &SOCKS5ListenerTCP{
 		config: config,
 		logger: logger,
 	}
 }
 
-func (s *SOCKS5Listener) Start() {
+func (s *SOCKS5ListenerTCP) Start() {
 	listener, err := net.Listen("tcp", s.config.ListenAddress)
 	if err != nil {
 		s.logger.Fatal("failed to start SOCKS5Listener on",
