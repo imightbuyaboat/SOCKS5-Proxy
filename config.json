@@ -1,0 +1,4 @@
+{
+    "listen_address": "0.0.0.0:1080",
+    "remote_tcp_address": "0.0.0.0:1081"
+}

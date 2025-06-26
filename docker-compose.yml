@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  client:
+    container_name: socks5_proxy_client
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "1080:1080"
+      - "1081:1081"
