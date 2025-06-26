@@ -19,6 +19,5 @@ COPY .env .
 COPY config.json .
 
 EXPOSE 1080
-EXPOSE 1081
 
 CMD ["./main"]
