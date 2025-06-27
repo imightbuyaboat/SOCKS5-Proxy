@@ -80,9 +80,9 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	// вызов обработчика
 	switch cmd {
 	case 0x01:
-		tcp.HandleTCPAssociateConn(targetAddr, remoteConn, conn, s.logger)
+		tcp.NewTCPAssociateHandler(s.logger).HandleTCPAssociateConn(targetAddr, remoteConn, conn)
 
 	case 0x03:
-		udp.HandleUDPAssociateConn(remoteConn, conn, s.logger)
+		udp.NewUDPAssociateHandler(s.logger).HandleUDPAssociateConn(remoteConn, conn)
 	}
 }

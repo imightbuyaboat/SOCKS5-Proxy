@@ -7,22 +7,41 @@ import (
 	"strconv"
 )
 
-func BuildSocks5UDPHeader(dstAddr string) ([]byte, error) {
+type Socks5UDPHeader struct {
+	atyp    byte
+	dstAddr string
+	dstPort uint16
+}
+
+func (h *Socks5UDPHeader) ToBytes() []byte {
 	var header []byte
 	header = append(header, 0x00, 0x00, 0x00)
 
-	var err error
+	portBytes := make([]byte, 2)
 
-	// dst
-	header, err = addAddressToHeader(header, dstAddr)
-	if err != nil {
-		return nil, err
+	if h.atyp == 0x01 {
+		header = append(header, 0x01)
+		header = append(header, net.ParseIP(h.dstAddr)...)
+		binary.BigEndian.PutUint16(portBytes, h.dstPort)
+		header = append(header, portBytes...)
+	} else {
+		header = append(header, 0x03)
+		header = append(header, byte(len(h.dstAddr)))
+		header = append(header, []byte(h.dstAddr)...)
+		binary.BigEndian.PutUint16(portBytes, h.dstPort)
+		header = append(header, portBytes...)
 	}
 
-	return header, nil
+	return header
 }
 
-func addAddressToHeader(header []byte, addr string) ([]byte, error) {
+func (h *Socks5UDPHeader) DST() string {
+	return net.JoinHostPort(h.dstAddr, strconv.Itoa(int(h.dstPort)))
+}
+
+func BuildSocks5UDPHeader(addr string) (*Socks5UDPHeader, error) {
+	var header Socks5UDPHeader
+
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -33,83 +52,61 @@ func addAddressToHeader(header []byte, addr string) ([]byte, error) {
 	ip := net.ParseIP(host).To4()
 	if ip != nil {
 		// IPv4
-		header = append(header, 0x01)
-		header = append(header, ip...)
-
-		portBytes := make([]byte, 2)
-		binary.BigEndian.PutUint16(portBytes, uint16(port))
-		header = append(header, portBytes...)
+		header.atyp = 0x01
+		header.dstAddr = ip.String()
+		header.dstPort = uint16(port)
 
 	} else {
 		// домен
-		header = append(header, 0x03)
-		header = append(header, byte(len(host)))
-		header = append(header, []byte(host)...)
-		portBytes := make([]byte, 2)
-		binary.BigEndian.PutUint16(portBytes, uint16(port))
-		header = append(header, portBytes...)
+		header.atyp = 0x03
+		header.dstAddr = host
+		header.dstPort = uint16(port)
 	}
 
-	return header, nil
+	return &header, nil
 }
 
-func ParseSocks5UDPHeader(packet []byte) (string, []byte, error) {
-	if len(packet) < 3 {
-		return "", nil, fmt.Errorf("packet too short")
+func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
+	if len(packet) < 4 {
+		return nil, nil, fmt.Errorf("packet too short")
 	}
 
-	i := 3
+	var header Socks5UDPHeader
+	header.atyp = packet[3]
 
-	// dst
-	dstAddr, n, err := parseAddress(packet[i:])
-	if err != nil {
-		return "", nil, err
+	var i int
+
+	switch header.atyp {
+	case 0x01:
+		// IPv4
+		if len(packet) < 10 {
+			return nil, nil, fmt.Errorf("invalid IPv4 address")
+		}
+		header.dstAddr = net.IP(packet[4:8]).String()
+		header.dstPort = binary.BigEndian.Uint16(packet[8:10])
+		i = 10
+
+	case 0x03:
+		// домен
+		if len(packet) < 5 {
+			return nil, nil, fmt.Errorf("invalid domain length")
+		}
+		domainLen := int(packet[4])
+		if len(packet) < 7+domainLen {
+			return nil, nil, fmt.Errorf("invalid domain address")
+		}
+		header.dstAddr = string(packet[5 : 5+domainLen])
+		header.dstPort = binary.BigEndian.Uint16(packet[5+domainLen : 7+domainLen])
+		i = 7 + domainLen
+
+	default:
+		return nil, nil, fmt.Errorf("unsupported address type: %d", packet[5])
 	}
-	i += n
 
 	if i > len(packet) {
-		return "", nil, fmt.Errorf("invalid packet structure")
+		return nil, nil, fmt.Errorf("invalid packet structure")
 	}
 	payload := packet[i:]
 
-	return dstAddr, payload, nil
-}
-
-func parseAddress(data []byte) (string, int, error) {
-	if len(data) < 1 {
-		return "", 0, fmt.Errorf("address too short")
-	}
-
-	atyp := data[0]
-	i := 1
-
-	switch atyp {
-	case 0x01: // IPv4
-		if len(data) < i+6 {
-			return "", 0, fmt.Errorf("invalid IPv4 address")
-		}
-		ip := net.IP(data[i : i+4]).String()
-		i += 4
-		port := binary.BigEndian.Uint16(data[i : i+2])
-		i += 2
-		return net.JoinHostPort(ip, strconv.Itoa(int(port))), i, nil
-
-	case 0x03: // domain
-		if len(data) < i+1 {
-			return "", 0, fmt.Errorf("invalid domain length")
-		}
-		domainLen := int(data[i])
-		i++
-		if len(data) < i+domainLen+2 {
-			return "", 0, fmt.Errorf("invalid domain address")
-		}
-		host := string(data[i : i+domainLen])
-		i += domainLen
-		port := binary.BigEndian.Uint16(data[i : i+2])
-		i += 2
-		return net.JoinHostPort(host, strconv.Itoa(int(port))), i, nil
-
-	default:
-		return "", 0, fmt.Errorf("unsupported address type: %d", atyp)
-	}
+	return &header, payload, nil
 }

@@ -8,14 +8,24 @@ import (
 	"go.uber.org/zap"
 )
 
-func HandleTCPAssociateConn(targetAddr string, remoteConn *crypto.SecureConn, conn net.Conn, logger *zap.Logger) {
+type TCPAssociateHandler struct {
+	logger *zap.Logger
+}
+
+func NewTCPAssociateHandler(logger *zap.Logger) *TCPAssociateHandler {
+	return &TCPAssociateHandler{
+		logger: logger,
+	}
+}
+
+func (h *TCPAssociateHandler) HandleTCPAssociateConn(targetAddr string, remoteConn *crypto.SecureConn, conn net.Conn) {
 	// отправляем целевой адрес и его длину
 	addrBytes := []byte(targetAddr)
 	length := byte(len(addrBytes))
 
 	_, err := remoteConn.Write([]byte{length})
 	if err != nil {
-		logger.Error("failed to write length of target address",
+		h.logger.Error("failed to write length of target address",
 			zap.String("target_address", targetAddr),
 			zap.Int("length", int(length)),
 			zap.Error(err))
@@ -24,7 +34,7 @@ func HandleTCPAssociateConn(targetAddr string, remoteConn *crypto.SecureConn, co
 
 	_, err = remoteConn.Write(addrBytes)
 	if err != nil {
-		logger.Error("failed to write target address",
+		h.logger.Error("failed to write target address",
 			zap.String("target_address", targetAddr),
 			zap.Error(err))
 		return
