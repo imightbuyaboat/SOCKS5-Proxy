@@ -7,17 +7,11 @@ import (
 	"strconv"
 )
 
-func BuildSocks5UDPHeader(srcAddr, dstAddr string) ([]byte, error) {
+func BuildSocks5UDPHeader(dstAddr string) ([]byte, error) {
 	var header []byte
 	header = append(header, 0x00, 0x00, 0x00)
 
 	var err error
-
-	// src
-	header, err = addAddressToHeader(header, srcAddr)
-	if err != nil {
-		return nil, err
-	}
 
 	// dst
 	header, err = addAddressToHeader(header, dstAddr)
@@ -59,9 +53,9 @@ func addAddressToHeader(header []byte, addr string) ([]byte, error) {
 	return header, nil
 }
 
-func ParseSocks5UDPHeader(packet []byte) (string, string, []byte, error) {
+func ParseSocks5UDPHeader(packet []byte) (string, []byte, error) {
 	if len(packet) < 3 {
-		return "", "", nil, fmt.Errorf("packet too short")
+		return "", nil, fmt.Errorf("packet too short")
 	}
 
 	i := 3
@@ -69,23 +63,16 @@ func ParseSocks5UDPHeader(packet []byte) (string, string, []byte, error) {
 	// dst
 	dstAddr, n, err := parseAddress(packet[i:])
 	if err != nil {
-		return "", "", nil, err
-	}
-	i += n
-
-	// src
-	srcAddr, n, err := parseAddress(packet[i:])
-	if err != nil {
-		return "", "", nil, err
+		return "", nil, err
 	}
 	i += n
 
 	if i > len(packet) {
-		return "", "", nil, fmt.Errorf("invalid packet structure")
+		return "", nil, fmt.Errorf("invalid packet structure")
 	}
 	payload := packet[i:]
 
-	return srcAddr, dstAddr, payload, nil
+	return dstAddr, payload, nil
 }
 
 func parseAddress(data []byte) (string, int, error) {

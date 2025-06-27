@@ -34,7 +34,7 @@ func (l *UDPAssociateListener) HandleConnection(conn net.Conn) {
 		}
 
 		// парсим пакет
-		srcAddr, targetAddr, payload, err := udp_header.ParseSocks5UDPHeader(buf[:n])
+		dstAddr, payload, err := udp_header.ParseSocks5UDPHeader(buf[:n])
 		if err != nil {
 			l.logger.Error("failed to parse UDP packet",
 				zap.String("address", conn.RemoteAddr().String()),
@@ -45,26 +45,26 @@ func (l *UDPAssociateListener) HandleConnection(conn net.Conn) {
 		l.logger.Info("successfully read and parse packet",
 			zap.String("address", conn.RemoteAddr().String()),
 			zap.Int("length", n),
-			zap.String("target_address", targetAddr))
+			zap.String("target_address", dstAddr))
 
 		// устанавливаем содениние с целевым адресом
-		remoteConn, err := createRemoteUDPConnection(string(targetAddr))
+		remoteConn, err := createRemoteUDPConnection(string(dstAddr))
 		if err != nil {
 			l.logger.Error("failed to create remote connection",
-				zap.String("target_address", string(targetAddr)),
+				zap.String("target_address", string(dstAddr)),
 				zap.Error(err))
 			return
 		}
 		defer remoteConn.Close()
 
 		l.logger.Info("successfully create connection to target address",
-			zap.String("target_address", string(targetAddr)))
+			zap.String("target_address", string(dstAddr)))
 
 		// отправляем полезную нагрузку
 		_, err = remoteConn.Write(payload)
 		if err != nil {
 			l.logger.Error("failed to write payload to remote connection",
-				zap.String("target_address", string(targetAddr)),
+				zap.String("target_address", string(dstAddr)),
 				zap.Error(err))
 			return
 		}
@@ -73,13 +73,13 @@ func (l *UDPAssociateListener) HandleConnection(conn net.Conn) {
 		n, err = remoteConn.Read(buf)
 		if err != nil {
 			l.logger.Error("failed to read data from remote connection",
-				zap.String("target_address", string(targetAddr)),
+				zap.String("target_address", string(dstAddr)),
 				zap.Error(err))
 			return
 		}
 
 		// генерируем пакет с заголовком
-		packet, err := udp_header.BuildSocks5UDPHeader(targetAddr, srcAddr)
+		packet, err := udp_header.BuildSocks5UDPHeader(dstAddr)
 		if err != nil {
 			l.logger.Error("failed to build UDP header",
 				zap.Error(err))

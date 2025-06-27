@@ -55,26 +55,18 @@ func HandleUDPAssociateConn(remoteConn *crypto.SecureConn, conn net.Conn, logger
 			}
 
 			// парсим заголовок пакета
-			_, clientAddrStr, payload, err := udp_header.ParseSocks5UDPHeader(buf[:n])
+			_, payload, err := udp_header.ParseSocks5UDPHeader(buf[:n])
 			if err != nil {
 				logger.Error("failed to parse UDP header",
 					zap.Error(err))
 				return
 			}
 
-			addr, err := net.ResolveUDPAddr("udp", clientAddrStr)
-			if err != nil {
-				logger.Error("failed to resolve UDP address",
-					zap.String("client_address", clientAddrStr),
-					zap.Error(err))
-				return
-			}
-
 			// пересылаем полезную нагрузку пользователю
-			_, err = udpConn.WriteToUDP(payload, addr)
+			_, err = udpConn.Write(payload)
 			if err != nil {
 				logger.Error("failed to write packet to UDP connection",
-					zap.String("client_address", clientAddrStr),
+					zap.String("client_address", udpAddr.String()),
 					zap.Error(err))
 				return
 			}
