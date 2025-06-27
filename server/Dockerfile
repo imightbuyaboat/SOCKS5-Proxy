@@ -18,6 +18,4 @@ COPY --from=builder /SOCKS5-proxy/server/main .
 COPY .env .
 COPY config.json .
 
-EXPOSE 1081
-
 CMD ["./main"]

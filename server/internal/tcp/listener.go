@@ -7,26 +7,26 @@ import (
 	"go.uber.org/zap"
 )
 
-type TCPListener struct {
+type TCPAssociateListener struct {
 	config *config.Config
 	logger *zap.Logger
 }
 
-func NewTCPListener(config *config.Config, logger *zap.Logger) *TCPListener {
-	return &TCPListener{
+func NewTCPAssociateListener(config *config.Config, logger *zap.Logger) *TCPAssociateListener {
+	return &TCPAssociateListener{
 		config: config,
 		logger: logger,
 	}
 }
 
-func (l *TCPListener) Start() {
+func (l *TCPAssociateListener) Start() {
 	listener, err := net.Listen("tcp", l.config.RemoteTCPAddress)
 	if err != nil {
-		l.logger.Fatal("failed to start TCPListener on",
+		l.logger.Fatal("failed to start TCPAssociateListener on",
 			zap.String("address", l.config.RemoteTCPAddress),
 			zap.Error(err))
 	}
-	l.logger.Info("TCP listening on",
+	l.logger.Info("TCPAssociateListener listening on",
 		zap.String("address", l.config.RemoteTCPAddress))
 
 	for {
@@ -39,6 +39,6 @@ func (l *TCPListener) Start() {
 		l.logger.Info("successfully accepted connection",
 			zap.String("address", conn.RemoteAddr().String()))
 
-		go l.handleConnection(conn)
+		go l.HandleConnection(conn)
 	}
 }

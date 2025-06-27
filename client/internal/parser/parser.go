@@ -1,4 +1,4 @@
-package socks5
+package parser
 
 import (
 	"fmt"
@@ -6,6 +6,10 @@ import (
 )
 
 func ParseHandshake(req []byte) error {
+	if len(req) < 3 {
+		return fmt.Errorf("invalid handshake request")
+	}
+
 	ver := req[0]
 	nMethods := int(req[1])
 
@@ -32,13 +36,21 @@ func ParseHandshake(req []byte) error {
 	return nil
 }
 
-func ParseConnectRequest(req []byte) (string, error) {
+func ParseConnectRequest(req []byte) (byte, string, error) {
+	if len(req) < 4 {
+		return 0x00, "", fmt.Errorf("invalid connect request")
+	}
+
 	ver := req[0]
 	cmd := req[1]
 	atyp := req[3]
 
-	if ver != 0x05 || cmd != 0x01 {
-		return "", fmt.Errorf("invalid connection request")
+	if ver != 0x05 || (cmd != 0x01 && cmd != 0x03) {
+		return 0x00, "", fmt.Errorf("invalid connection request")
+	}
+
+	if cmd == 0x03 {
+		return cmd, "", nil
 	}
 
 	var addr string
@@ -46,19 +58,28 @@ func ParseConnectRequest(req []byte) (string, error) {
 
 	switch atyp {
 	case 0x01:
+		if len(req) != 10 {
+			return 0x00, "", fmt.Errorf("invalid ipv4 in connect request")
+		}
+
 		ip := net.IP(req[4:8])
 		port = uint16(req[8])<<8 | uint16(req[9])
 		addr = fmt.Sprintf("%s:%d", ip, port)
 
 	case 0x03:
 		nameLen := req[4]
+
+		if len(req) != 7+int(nameLen) {
+			return 0x00, "", fmt.Errorf("invalid domain in connect request")
+		}
+
 		host := string(req[5 : 5+nameLen])
 		port = uint16(req[5+nameLen])<<8 | uint16(req[6+nameLen])
 		addr = fmt.Sprintf("%s:%d", host, port)
 
 	default:
-		return "", fmt.Errorf("invalid connection request")
+		return 0x00, "", fmt.Errorf("unsupported type of address")
 	}
 
-	return addr, nil
+	return cmd, addr, nil
 }

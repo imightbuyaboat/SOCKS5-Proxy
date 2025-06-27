@@ -14,6 +14,7 @@ import (
 type Config struct {
 	ListenAddress    string `json:"listen_address"`
 	RemoteTCPAddress string `json:"remote_tcp_address"`
+	RemoteUDPAddress string `json:"remote_udp_address"`
 	Key              []byte
 }
 
@@ -58,6 +59,17 @@ func (c *Config) validateConfig() error {
 	}
 
 	host, portStr, err = net.SplitHostPort(c.RemoteTCPAddress)
+	if err != nil {
+		return err
+	}
+	if err = validateHost(host); err != nil {
+		return err
+	}
+	if err = validatePort(portStr); err != nil {
+		return err
+	}
+
+	host, portStr, err = net.SplitHostPort(c.RemoteUDPAddress)
 	if err != nil {
 		return err
 	}

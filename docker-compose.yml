@@ -6,12 +6,10 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
-    ports:
-      - "1080:1080"
+    network_mode: "host"
   server:
     container_name: socks5_proxy_server
     build:
       context: .
       dockerfile: server/Dockerfile
-    ports:
-      - "1081:1081"
+    network_mode: "host"

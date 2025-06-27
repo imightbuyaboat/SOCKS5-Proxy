@@ -4,14 +4,16 @@ import (
 	"io"
 	"net"
 
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"go.uber.org/zap"
 )
 
-func (l *TCPListener) handleConnection(conn net.Conn) {
+func (l *TCPAssociateListener) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	secureConn, err := crypto.NewSecureConn(conn, []byte(l.config.Key))
+	// устанавливаем защищенное соединение
+	secureConn, err := crypto.NewSecureConn(conn, l.config.Key)
 	if err != nil {
 		l.logger.Error("failed to create secure connection",
 			zap.String("address", conn.RemoteAddr().String()),
@@ -19,11 +21,12 @@ func (l *TCPListener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	buf := make([]byte, 512)
+	buf := make([]byte, constants.BLOCK_SIZE)
 
+	// читаем длину адреса
 	n, err := secureConn.Read(buf)
 	if err != nil {
-		l.logger.Error("failed to read target address length",
+		l.logger.Error("failed to read length of target address",
 			zap.String("address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
@@ -36,6 +39,7 @@ func (l *TCPListener) handleConnection(conn net.Conn) {
 
 	length := int(buf[0])
 
+	// читаем адрес
 	n, err = secureConn.Read(buf)
 	if err != nil {
 		l.logger.Error("failed to read target address",
@@ -50,10 +54,12 @@ func (l *TCPListener) handleConnection(conn net.Conn) {
 	}
 
 	targetAddr := buf[:length]
+
 	l.logger.Info("successfully read target address",
 		zap.Int("length", length),
 		zap.String("target_address", string(targetAddr)))
 
+	// устанавливаем соединение с целевым адресом
 	remoteConn, err := createRemoteTCPConnection(string(targetAddr))
 	if err != nil {
 		l.logger.Error("failed to create remote connection",
@@ -62,6 +68,7 @@ func (l *TCPListener) handleConnection(conn net.Conn) {
 			zap.Error(err))
 		return
 	}
+	defer remoteConn.Close()
 
 	l.logger.Info("successfully create connection to target address",
 		zap.String("target_address", string(targetAddr)))
