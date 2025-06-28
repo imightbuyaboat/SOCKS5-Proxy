@@ -39,6 +39,6 @@ func (l *UDPAssociateListener) Start() {
 		l.logger.Info("successfully accepted connection",
 			zap.String("address", conn.RemoteAddr().String()))
 
-		go l.HandleConnection(conn)
+		go l.handleUDPRelay(conn)
 	}
 }

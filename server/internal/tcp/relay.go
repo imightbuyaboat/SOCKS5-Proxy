@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (l *TCPAssociateListener) HandleConnection(conn net.Conn) {
+func (l *TCPAssociateListener) handleTCPRelay(conn net.Conn) {
 	defer conn.Close()
 
 	// устанавливаем защищенное соединение

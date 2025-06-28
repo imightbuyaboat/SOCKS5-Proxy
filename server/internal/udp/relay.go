@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (l *UDPAssociateListener) HandleConnection(conn net.Conn) {
+func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
 	defer conn.Close()
 
 	// устанавливаем защищенное соединение с прокси-клиентом
