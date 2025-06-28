@@ -52,6 +52,8 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 	h.logger.Info("listen udp packets",
 		zap.Int("port", port))
 
+	var clientAddr *net.UDPAddr
+
 	// читаем пакеты с прокси-сервера
 	go func() {
 		for {
@@ -72,8 +74,13 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 				return
 			}
 
+			if clientAddr == nil {
+				h.logger.Warn("client address not set")
+				continue
+			}
+
 			// пересылаем полезную нагрузку пользователю
-			_, err = udpConn.Write(payload)
+			_, err = udpConn.WriteToUDP(payload, clientAddr)
 			if err != nil {
 				h.logger.Error("failed to write packet to UDP connection",
 					zap.String("client_address", udpAddr.String()),
@@ -87,20 +94,26 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 	for {
 		buf := make([]byte, constants.BLOCK_SIZE)
 
-		n, clientAddr, err := udpConn.ReadFromUDP(buf)
+		n, addr, err := udpConn.ReadFromUDP(buf)
 		if err != nil {
 			h.logger.Error("failed to read packet from UDP connection",
-				zap.String("client_address", clientAddr.String()),
+				zap.String("client_address", addr.String()),
 				zap.Error(err))
 			return
 		}
 
+		if clientAddr == nil {
+			clientAddr = addr
+			h.logger.Info("set client addr",
+				zap.String("client_address", addr.String()))
+		}
+
 		h.logger.Info("succesfully receive packet from client",
 			zap.Int("length", n),
-			zap.String("client_address", clientAddr.String()))
+			zap.String("client_address", addr.String()))
 
 		// отправляем пакеты на прокси-сервер
-		_, err = remoteConn.Write(buf)
+		_, err = remoteConn.Write(buf[:n])
 		if err != nil {
 			h.logger.Error("failed to write to remote connection",
 				zap.Error(err))
@@ -108,7 +121,7 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 		}
 
 		h.logger.Info("succesfully send packet to proxy-server",
-			zap.Int("length", len(buf)),
-			zap.String("client_address", clientAddr.String()))
+			zap.Int("length", n),
+			zap.String("client_address", addr.String()))
 	}
 }

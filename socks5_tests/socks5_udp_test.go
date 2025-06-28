@@ -68,18 +68,9 @@ func TestSOCKS5_UDP_Associate(t *testing.T) {
 	}
 	defer udpConn.Close()
 
-	srcAddr := udpConn.LocalAddr().(*net.UDPAddr)
-
 	// формируем пакет
 	var packet bytes.Buffer
 	packet.Write([]byte{0x00, 0x00, 0x00, 0x01})
-
-	packet.Write(srcAddr.IP.To4())
-	srcPortBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(srcPortBytes, uint16(srcAddr.Port))
-	packet.Write(srcPortBytes)
-
-	packet.Write([]byte{0x01})
 	packet.Write(net.ParseIP(targetIP).To4())
 	portBytes := make([]byte, 2)
 	binary.BigEndian.PutUint16(portBytes, targetPort)

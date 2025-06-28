@@ -17,20 +17,18 @@ func (h *Socks5UDPHeader) ToBytes() []byte {
 	var header []byte
 	header = append(header, 0x00, 0x00, 0x00)
 
-	portBytes := make([]byte, 2)
-
 	if h.atyp == 0x01 {
 		header = append(header, 0x01)
 		header = append(header, net.ParseIP(h.dstAddr)...)
-		binary.BigEndian.PutUint16(portBytes, h.dstPort)
-		header = append(header, portBytes...)
 	} else {
 		header = append(header, 0x03)
 		header = append(header, byte(len(h.dstAddr)))
 		header = append(header, []byte(h.dstAddr)...)
-		binary.BigEndian.PutUint16(portBytes, h.dstPort)
-		header = append(header, portBytes...)
 	}
+
+	portBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBytes, h.dstPort)
+	header = append(header, portBytes...)
 
 	return header
 }
@@ -100,7 +98,7 @@ func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
 		i = 7 + domainLen
 
 	default:
-		return nil, nil, fmt.Errorf("unsupported address type: %d", packet[5])
+		return nil, nil, fmt.Errorf("unsupported address type: %d", packet[3])
 	}
 
 	if i > len(packet) {

@@ -88,7 +88,7 @@ func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
 			return
 		}
 
-		packet := make([]byte, constants.BLOCK_SIZE)
+		var packet []byte
 		packet = append(packet, newHeader.ToBytes()...)
 		packet = append(packet, buf[:n]...)
 
