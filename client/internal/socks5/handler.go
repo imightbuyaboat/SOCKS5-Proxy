@@ -7,6 +7,7 @@ import (
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/tcp"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/udp"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"go.uber.org/zap"
 )
 
@@ -62,7 +63,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	}
 
 	// подключение к прокси-серверу
-	remoteConn, err := createRemoteConnectionToProxyServer(remoteAddr, s.config.Key)
+	remoteConn, err := createRemoteConnectionToProxyServer(remoteAddr)
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -74,15 +75,38 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	}
 	defer remoteConn.Close()
 
+	// генерируем ключ
+	key, err := crypto.GenerateSharedSecret(remoteConn, true)
+	if err != nil {
+		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
+		s.logger.Error("failed to generate key",
+			zap.String("remote_address", remoteAddr),
+			zap.Error(err))
+		return
+	}
+
+	// создаем защищенное подключение
+	secureRemoteConn, err := crypto.NewSecureConn(remoteConn, key)
+	if err != nil {
+		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+
+		s.logger.Error("failed to create secure remote connection",
+			zap.String("address", conn.RemoteAddr().String()),
+			zap.String("remote_address", remoteAddr),
+			zap.Error(err))
+		return
+	}
+
 	s.logger.Info("successfully create remote connection to proxy-server",
 		zap.String("remote_tcp_address", remoteAddr))
 
 	// вызов обработчика
 	switch cmd {
 	case 0x01:
-		tcp.NewTCPAssociateHandler(s.logger).HandleTCPAssociateConn(targetAddr, remoteConn, conn)
+		tcp.NewTCPAssociateHandler(s.logger).HandleTCPAssociateConn(targetAddr, secureRemoteConn, conn)
 
 	case 0x03:
-		udp.NewUDPAssociateHandler(s.logger).HandleUDPAssociateConn(remoteConn, conn)
+		udp.NewUDPAssociateHandler(s.logger).HandleUDPAssociateConn(secureRemoteConn, conn)
 	}
 }

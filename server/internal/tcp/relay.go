@@ -12,8 +12,17 @@ import (
 func (l *TCPAssociateListener) handleTCPRelay(conn net.Conn) {
 	defer conn.Close()
 
+	// генерируем ключ
+	key, err := crypto.GenerateSharedSecret(conn, false)
+	if err != nil {
+		l.logger.Error("failed to generate key",
+			zap.String("address", conn.RemoteAddr().String()),
+			zap.Error(err))
+		return
+	}
+
 	// устанавливаем защищенное соединение
-	secureConn, err := crypto.NewSecureConn(conn, l.config.Key)
+	secureConn, err := crypto.NewSecureConn(conn, key)
 	if err != nil {
 		l.logger.Error("failed to create secure connection",
 			zap.String("address", conn.RemoteAddr().String()),

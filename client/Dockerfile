@@ -15,7 +15,6 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /SOCKS5-proxy/client/main .
-COPY .env .
 COPY config.json .
 
 CMD ["./main"]
