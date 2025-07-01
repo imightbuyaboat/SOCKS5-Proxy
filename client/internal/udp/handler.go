@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"net"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/udp_header"
 	"go.uber.org/zap"
@@ -57,7 +57,7 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 	// читаем пакеты с прокси-сервера
 	go func() {
 		for {
-			buf := make([]byte, constants.BLOCK_SIZE)
+			buf := make([]byte, block.BLOCK_SIZE)
 
 			n, err := remoteConn.Read(buf)
 			if err != nil {
@@ -92,7 +92,7 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 
 	// отправляем пакеты на прокси-сервер
 	for {
-		buf := make([]byte, constants.BLOCK_SIZE)
+		buf := make([]byte, block.BLOCK_SIZE)
 
 		n, addr, err := udpConn.ReadFromUDP(buf)
 		if err != nil {

@@ -6,7 +6,7 @@ import (
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/parser"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/tcp"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/udp"
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"go.uber.org/zap"
 )
@@ -14,7 +14,7 @@ import (
 func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	buf := make([]byte, constants.BLOCK_SIZE)
+	buf := make([]byte, block.BLOCK_SIZE)
 
 	// handshake request
 	n, err := conn.Read(buf)

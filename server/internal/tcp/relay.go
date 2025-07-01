@@ -4,7 +4,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"go.uber.org/zap"
 )
@@ -30,7 +30,7 @@ func (l *TCPAssociateListener) handleTCPRelay(conn net.Conn) {
 		return
 	}
 
-	buf := make([]byte, constants.BLOCK_SIZE)
+	buf := make([]byte, block.BLOCK_SIZE)
 
 	// читаем длину адреса
 	n, err := secureConn.Read(buf)
