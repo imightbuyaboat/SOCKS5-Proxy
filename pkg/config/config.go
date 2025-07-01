@@ -34,58 +34,38 @@ func LoadConfig() (*Config, error) {
 }
 
 func (c *Config) validateConfig() error {
-	host, portStr, err := net.SplitHostPort(c.ListenAddress)
-	if err != nil {
+	if err := validateAddress(c.ListenAddress); err != nil {
 		return err
 	}
-	if err = validateHost(host); err != nil {
+	if err := validateAddress(c.RemoteTCPAddress); err != nil {
 		return err
 	}
-	if err = validatePort(portStr); err != nil {
-		return err
-	}
-
-	host, portStr, err = net.SplitHostPort(c.RemoteTCPAddress)
-	if err != nil {
-		return err
-	}
-	if err = validateHost(host); err != nil {
-		return err
-	}
-	if err = validatePort(portStr); err != nil {
-		return err
-	}
-
-	host, portStr, err = net.SplitHostPort(c.RemoteUDPAddress)
-	if err != nil {
-		return err
-	}
-	if err = validateHost(host); err != nil {
-		return err
-	}
-	if err = validatePort(portStr); err != nil {
+	if err := validateAddress(c.RemoteUDPAddress); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func validateHost(host string) error {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return fmt.Errorf("invalid ip")
+func validateAddress(addr string) error {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return err
 	}
-	return nil
-}
 
-func validatePort(portStr string) error {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
-		return fmt.Errorf("invalid port: %v", err)
+		return err
 	}
 
 	if port < 0 || port > 65535 {
 		return fmt.Errorf("invalid port")
 	}
+
+	ip := net.ParseIP(host).To4()
+	if ip == nil {
+		return fmt.Errorf("invalid format of address")
+	}
+
 	return nil
 }
