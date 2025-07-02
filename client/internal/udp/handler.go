@@ -74,6 +74,10 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 				return
 			}
 
+			h.logger.Info("read and parse packet from proxy server",
+				zap.Int("length", n),
+				zap.Int("payload_length", len(payload)))
+
 			if clientAddr == nil {
 				h.logger.Warn("client address not set")
 				continue
@@ -108,7 +112,7 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 				zap.String("client_address", addr.String()))
 		}
 
-		h.logger.Info("succesfully receive packet from client",
+		h.logger.Info("read packet from client",
 			zap.Int("length", n),
 			zap.String("client_address", addr.String()))
 
@@ -120,8 +124,6 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 			return
 		}
 
-		h.logger.Info("succesfully send packet to proxy-server",
-			zap.Int("length", n),
-			zap.String("client_address", addr.String()))
+		h.logger.Info("send packet to proxy-server")
 	}
 }

@@ -80,8 +80,10 @@ func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
 			return
 		}
 
+		repsonse := make([]byte, block.BLOCK_SIZE)
+
 		// читаем полезную нагрузку
-		n, err = remoteConn.Read(buf)
+		n, err = remoteConn.Read(repsonse)
 		if err != nil {
 			l.logger.Error("failed to read data from remote connection",
 				zap.String("target_address", dstAddr),
@@ -89,17 +91,12 @@ func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
 			return
 		}
 
-		// генерируем пакет с заголовком
-		newHeader, err := udp_header.BuildSocks5UDPHeader(dstAddr)
-		if err != nil {
-			l.logger.Error("failed to build UDP header",
-				zap.Error(err))
-			return
-		}
+		l.logger.Info("read response from target address",
+			zap.Int("length", n))
 
 		var packet []byte
-		packet = append(packet, newHeader.ToBytes()...)
-		packet = append(packet, buf[:n]...)
+		packet = append(packet, header.Bytes()...)
+		packet = append(packet, repsonse[:n]...)
 
 		// отправляем пакет прокси-клиенту
 		_, err = secureConn.Write(packet)

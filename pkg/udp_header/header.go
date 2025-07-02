@@ -9,32 +9,41 @@ import (
 
 type Socks5UDPHeader struct {
 	atyp    byte
-	dstAddr string
-	dstPort uint16
+	dstAddr []byte
+	dstPort []byte
 }
 
-func (h *Socks5UDPHeader) ToBytes() []byte {
+func (h *Socks5UDPHeader) Bytes() []byte {
 	var header []byte
 	header = append(header, 0x00, 0x00, 0x00)
 
 	if h.atyp == 0x01 {
 		header = append(header, 0x01)
-		header = append(header, net.ParseIP(h.dstAddr)...)
+		header = append(header, h.dstAddr...)
 	} else {
 		header = append(header, 0x03)
 		header = append(header, byte(len(h.dstAddr)))
-		header = append(header, []byte(h.dstAddr)...)
+		header = append(header, h.dstAddr...)
 	}
 
-	portBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(portBytes, h.dstPort)
-	header = append(header, portBytes...)
+	header = append(header, h.dstPort...)
 
 	return header
 }
 
 func (h *Socks5UDPHeader) DST() string {
-	return net.JoinHostPort(h.dstAddr, strconv.Itoa(int(h.dstPort)))
+	var host string
+
+	switch h.atyp {
+	case 0x01:
+		host = net.IP(h.dstAddr).String()
+	case 0x03:
+		host = string(h.dstAddr)
+	}
+
+	port := binary.BigEndian.Uint16(h.dstPort)
+
+	return net.JoinHostPort(host, strconv.Itoa(int(port)))
 }
 
 func BuildSocks5UDPHeader(addr string) (*Socks5UDPHeader, error) {
@@ -46,20 +55,25 @@ func BuildSocks5UDPHeader(addr string) (*Socks5UDPHeader, error) {
 	}
 
 	port, _ := strconv.Atoi(portStr)
+	if port < 0 || port > 65535 {
+		return nil, fmt.Errorf("invalid port")
+	}
 
 	ip := net.ParseIP(host).To4()
 	if ip != nil {
 		// IPv4
 		header.atyp = 0x01
-		header.dstAddr = ip.String()
-		header.dstPort = uint16(port)
+		header.dstAddr = net.ParseIP(host)[12:]
 
 	} else {
 		// домен
 		header.atyp = 0x03
-		header.dstAddr = host
-		header.dstPort = uint16(port)
+		header.dstAddr = []byte(host)
 	}
+
+	portBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(portBytes, uint16(port))
+	header.dstPort = portBytes
 
 	return &header, nil
 }
@@ -70,9 +84,8 @@ func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
 	}
 
 	var header Socks5UDPHeader
+	var payload []byte
 	header.atyp = packet[3]
-
-	var i int
 
 	switch header.atyp {
 	case 0x01:
@@ -80,9 +93,13 @@ func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
 		if len(packet) < 10 {
 			return nil, nil, fmt.Errorf("invalid IPv4 address")
 		}
-		header.dstAddr = net.IP(packet[4:8]).String()
-		header.dstPort = binary.BigEndian.Uint16(packet[8:10])
-		i = 10
+		header.dstAddr = packet[4:8]
+		header.dstPort = packet[8:10]
+
+		if 10 > len(packet) {
+			return nil, nil, fmt.Errorf("invalid packet structure")
+		}
+		payload = packet[10:]
 
 	case 0x03:
 		// домен
@@ -93,18 +110,17 @@ func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
 		if len(packet) < 7+domainLen {
 			return nil, nil, fmt.Errorf("invalid domain address")
 		}
-		header.dstAddr = string(packet[5 : 5+domainLen])
-		header.dstPort = binary.BigEndian.Uint16(packet[5+domainLen : 7+domainLen])
-		i = 7 + domainLen
+		header.dstAddr = packet[5 : 5+domainLen]
+		header.dstPort = packet[5+domainLen : 7+domainLen]
+
+		if 7+domainLen > len(packet) {
+			return nil, nil, fmt.Errorf("invalid packet structure")
+		}
+		payload = packet[7+domainLen:]
 
 	default:
 		return nil, nil, fmt.Errorf("unsupported address type: %d", packet[3])
 	}
-
-	if i > len(packet) {
-		return nil, nil, fmt.Errorf("invalid packet structure")
-	}
-	payload := packet[i:]
 
 	return &header, payload, nil
 }
