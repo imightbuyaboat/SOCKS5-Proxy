@@ -21,16 +21,16 @@ func ParseHandshake(req []byte) error {
 	}
 
 	// ищем метод без аутентификации (0x00)
-	hanNoAuth := false
+	hasNoAuth := false
 	for i := 0; i < nMethods; i++ {
 		if req[2+i] == 0x00 {
-			hanNoAuth = true
+			hasNoAuth = true
 			break
 		}
 	}
 
-	if !hanNoAuth {
-		return fmt.Errorf("no supported authentication methods")
+	if !hasNoAuth {
+		return ErrNoAcceptableMethods
 	}
 
 	return nil

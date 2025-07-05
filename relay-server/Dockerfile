@@ -4,7 +4,7 @@ WORKDIR /SOCKS5-proxy
 
 COPY . .
 
-WORKDIR /SOCKS5-proxy/client
+WORKDIR /SOCKS5-proxy/relay-server
 
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd
@@ -14,7 +14,7 @@ FROM alpine:latest
 
 WORKDIR /app
 
-COPY --from=builder /SOCKS5-proxy/client/main .
+COPY --from=builder /SOCKS5-proxy/relay-server/main .
 COPY config.json .
 
 CMD ["./main"]

@@ -2,14 +2,14 @@ version: '3.8'
 
 services:
   client:
-    container_name: socks5_proxy_client
+    container_name: socks5_server
     build:
       context: .
-      dockerfile: client/Dockerfile
+      dockerfile: socks5-server/Dockerfile
     network_mode: "host"
   server:
-    container_name: socks5_proxy_server
+    container_name: relay_server
     build:
       context: .
-      dockerfile: server/Dockerfile
+      dockerfile: relay-server/Dockerfile
     network_mode: "host"

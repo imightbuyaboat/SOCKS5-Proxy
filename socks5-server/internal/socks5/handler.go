@@ -1,6 +1,7 @@
 package socks5
 
 import (
+	"errors"
 	"net"
 
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/parser"
@@ -26,6 +27,14 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	}
 
 	if err = parser.ParseHandshake(buf[:n]); err != nil {
+		if errors.Is(err, parser.ErrNoAcceptableMethods) {
+			conn.Write([]byte{0x05, 0xFF})
+			s.logger.Error("no acceptable methods",
+				zap.String("address", conn.RemoteAddr().String()),
+				zap.Error(err))
+			return
+		}
+
 		s.logger.Error("failed to parse handshake request",
 			zap.String("address", conn.RemoteAddr().String()),
 			zap.Error(err))
