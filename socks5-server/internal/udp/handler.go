@@ -83,8 +83,19 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 				continue
 			}
 
+			// формируем новый заголовок
+			header, err := udp_header.BuildSocks5UDPHeader(clientAddr.String())
+			if err != nil {
+				h.logger.Error("failed to build UDP header",
+					zap.Error(err))
+				return
+			}
+
+			packet := header.Bytes()
+			packet = append(packet, payload...)
+
 			// пересылаем полезную нагрузку пользователю
-			_, err = udpConn.WriteToUDP(payload, clientAddr)
+			_, err = udpConn.WriteToUDP(packet, clientAddr)
 			if err != nil {
 				h.logger.Error("failed to write packet to UDP connection",
 					zap.String("client_address", udpAddr.String()),
