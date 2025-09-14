@@ -6,7 +6,7 @@ import (
 
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/udp_header"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/udp_associate"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +37,7 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 		h.logger.Error("failed to start UDP listener",
-			zap.String("listen_address", udpAddr.String()),
+			zap.String("udp_listen_address", udpAddr.String()),
 			zap.Error(err))
 		return
 	}
@@ -49,32 +49,32 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 	binary.BigEndian.PutUint16(portBytes, uint16(port))
 	conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0x7F, 0x00, 0x00, 0x01, portBytes[0], portBytes[1]})
 
-	h.logger.Info("listen udp packets",
+	h.logger.Info("starting listen udp packets",
 		zap.Int("port", port))
 
 	var clientAddr *net.UDPAddr
 
-	// читаем пакеты с прокси-сервера
+	// читаем пакеты с relay-сервера
 	go func() {
 		for {
 			buf := make([]byte, block.BLOCK_SIZE)
 
 			n, err := remoteConn.Read(buf)
 			if err != nil {
-				h.logger.Error("failed to read UDP packet from remote connection",
+				h.logger.Error("failed to read UDP packet from relay-server",
 					zap.Error(err))
 				return
 			}
 
 			// парсим заголовок пакета
-			_, payload, err := udp_header.ParseUDPPacket(buf[:n])
+			_, payload, err := udp_associate.ParseUDPPacket(buf[:n])
 			if err != nil {
 				h.logger.Error("failed to parse UDP header",
 					zap.Error(err))
 				return
 			}
 
-			h.logger.Info("read and parse packet from proxy server",
+			h.logger.Info("read and parse packet from relay-server",
 				zap.Int("length", n),
 				zap.Int("payload_length", len(payload)))
 
@@ -84,9 +84,9 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 			}
 
 			// формируем новый заголовок
-			header, err := udp_header.BuildSocks5UDPHeader(clientAddr.String())
+			header, err := udp_associate.BuildSocks5UDPHeader(clientAddr.String())
 			if err != nil {
-				h.logger.Error("failed to build UDP header",
+				h.logger.Error("failed to build UDP Associate header",
 					zap.Error(err))
 				return
 			}
@@ -94,10 +94,10 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 			packet := header.Bytes()
 			packet = append(packet, payload...)
 
-			// пересылаем полезную нагрузку пользователю
+			// пересылаем пакет клиенту
 			_, err = udpConn.WriteToUDP(packet, clientAddr)
 			if err != nil {
-				h.logger.Error("failed to write packet to UDP connection",
+				h.logger.Error("failed to write UDP packet to client",
 					zap.String("client_address", udpAddr.String()),
 					zap.Error(err))
 				return
@@ -105,13 +105,13 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 		}
 	}()
 
-	// отправляем пакеты на прокси-сервер
+	// отправляем пакеты на relay-сервер
 	for {
 		buf := make([]byte, block.BLOCK_SIZE)
 
 		n, addr, err := udpConn.ReadFromUDP(buf)
 		if err != nil {
-			h.logger.Error("failed to read packet from UDP connection",
+			h.logger.Error("failed to read UDP packet from client",
 				zap.String("client_address", addr.String()),
 				zap.Error(err))
 			return
@@ -119,22 +119,22 @@ func (h *UDPAssociateHandler) HandleUDPAssociateConn(remoteConn *crypto.SecureCo
 
 		if clientAddr == nil {
 			clientAddr = addr
-			h.logger.Info("set client addr",
+			h.logger.Info("set client address",
 				zap.String("client_address", addr.String()))
 		}
 
-		h.logger.Info("read packet from client",
-			zap.Int("length", n),
-			zap.String("client_address", addr.String()))
+		h.logger.Info("read UDP packet from client",
+			zap.String("client_address", addr.String()),
+			zap.Int("length", n))
 
-		// отправляем пакеты на прокси-сервер
+		// отправляем пакеты на relay-сервер
 		_, err = remoteConn.Write(buf[:n])
 		if err != nil {
-			h.logger.Error("failed to write to remote connection",
+			h.logger.Error("failed to write UDP packet to relay-server",
 				zap.Error(err))
 			return
 		}
 
-		h.logger.Info("send packet to proxy-server")
+		h.logger.Info("send UDP packet to relay-server")
 	}
 }

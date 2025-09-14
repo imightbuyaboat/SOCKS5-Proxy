@@ -9,9 +9,9 @@ import (
 )
 
 type Config struct {
-	ListenAddress    string `json:"listen_address"`
-	RemoteTCPAddress string `json:"remote_tcp_address"`
-	RemoteUDPAddress string `json:"remote_udp_address"`
+	SOCKS5ServerAddress   string `json:"socks5_server_address"`
+	TCPRelayServerAddress string `json:"tcp_relay_server_address"`
+	UDPRelayServerAddress string `json:"udp_relay_server_address"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -34,13 +34,13 @@ func LoadConfig() (*Config, error) {
 }
 
 func (c *Config) validateConfig() error {
-	if err := validateAddress(c.ListenAddress); err != nil {
+	if err := validateAddress(c.SOCKS5ServerAddress); err != nil {
 		return err
 	}
-	if err := validateAddress(c.RemoteTCPAddress); err != nil {
+	if err := validateAddress(c.TCPRelayServerAddress); err != nil {
 		return err
 	}
-	if err := validateAddress(c.RemoteUDPAddress); err != nil {
+	if err := validateAddress(c.UDPRelayServerAddress); err != nil {
 		return err
 	}
 

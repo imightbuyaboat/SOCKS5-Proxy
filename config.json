@@ -1,5 +1,5 @@
 {
-    "listen_address": "0.0.0.0:1080",
-    "remote_tcp_address": "0.0.0.0:1081",
-    "remote_udp_address": "0.0.0.0:1082"
+    "socks5_server_address": "0.0.0.0:1080",
+    "tcp_relay_server_address": "0.0.0.0:1081",
+    "udp_relay_server_address": "0.0.0.0:1082"
 }

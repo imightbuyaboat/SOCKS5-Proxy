@@ -1,5 +1,5 @@
 package block
 
 const (
-	BLOCK_SIZE = 512
+	BLOCK_SIZE = 1500
 )

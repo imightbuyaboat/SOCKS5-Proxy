@@ -21,7 +21,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	n, err := conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read handshake request",
-			zap.String("address", conn.RemoteAddr().String()),
+			zap.String("client_address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
 	}
@@ -30,13 +30,13 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		if errors.Is(err, parser.ErrNoAcceptableMethods) {
 			conn.Write([]byte{0x05, 0xFF})
 			s.logger.Error("no acceptable methods",
-				zap.String("address", conn.RemoteAddr().String()),
+				zap.String("client_address", conn.RemoteAddr().String()),
 				zap.Error(err))
 			return
 		}
 
 		s.logger.Error("failed to parse handshake request",
-			zap.String("address", conn.RemoteAddr().String()),
+			zap.String("client_address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
 	}
@@ -47,7 +47,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	n, err = conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read connect request",
-			zap.String("address", conn.RemoteAddr().String()),
+			zap.String("client_address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
 	}
@@ -57,7 +57,7 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
 		s.logger.Error("failed to parse connect request",
-			zap.String("address", conn.RemoteAddr().String()),
+			zap.String("client_address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
 	}
@@ -66,19 +66,18 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	var remoteAddr string
 	switch cmd {
 	case 0x01:
-		remoteAddr = s.config.RemoteTCPAddress
+		remoteAddr = s.config.TCPRelayServerAddress
 	case 0x03:
-		remoteAddr = s.config.RemoteUDPAddress
+		remoteAddr = s.config.UDPRelayServerAddress
 	}
 
-	// подключение к прокси-серверу
-	remoteConn, err := createRemoteConnectionToProxyServer(remoteAddr)
+	// подключение к relay-серверу
+	remoteConn, err := createRemoteConnectionToRelayServer(remoteAddr)
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-		s.logger.Error("failed to create remote connection",
-			zap.String("address", conn.RemoteAddr().String()),
-			zap.String("remote_address", remoteAddr),
+		s.logger.Error("failed to create connection to relay-server",
+			zap.String("relay_server_address", remoteAddr),
 			zap.Error(err))
 		return
 	}
@@ -89,8 +88,8 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-		s.logger.Error("failed to generate key",
-			zap.String("remote_address", remoteAddr),
+		s.logger.Error("failed to generate shared secret",
+			zap.String("relay_server_address", remoteAddr),
 			zap.Error(err))
 		return
 	}
@@ -100,15 +99,14 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
-		s.logger.Error("failed to create secure remote connection",
-			zap.String("address", conn.RemoteAddr().String()),
-			zap.String("remote_address", remoteAddr),
+		s.logger.Error("failed to create secure connection to relay-server",
+			zap.String("relay_server_address", remoteAddr),
 			zap.Error(err))
 		return
 	}
 
-	s.logger.Info("successfully create remote connection to proxy-server",
-		zap.String("remote_tcp_address", remoteAddr))
+	s.logger.Info("successfully create remote connection to relay-server",
+		zap.String("relay_server_address", remoteAddr))
 
 	// вызов обработчика
 	switch cmd {

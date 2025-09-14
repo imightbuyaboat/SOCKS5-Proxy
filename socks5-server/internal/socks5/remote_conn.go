@@ -4,7 +4,7 @@ import (
 	"net"
 )
 
-func createRemoteConnectionToProxyServer(remoteAddr string) (net.Conn, error) {
+func createRemoteConnectionToRelayServer(remoteAddr string) (net.Conn, error) {
 	// заглушка для docker
 	if remoteAddr == "0.0.0.0:1081" {
 		remoteAddr = "172.17.0.1:1081"

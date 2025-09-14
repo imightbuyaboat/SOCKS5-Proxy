@@ -1,4 +1,4 @@
-package udp_header
+package udp_associate
 
 import (
 	"encoding/binary"
@@ -7,13 +7,13 @@ import (
 	"strconv"
 )
 
-type Socks5UDPHeader struct {
+type Socks5UDPAssociateHeader struct {
 	atyp    byte
 	dstAddr []byte
 	dstPort []byte
 }
 
-func (h *Socks5UDPHeader) Bytes() []byte {
+func (h *Socks5UDPAssociateHeader) Bytes() []byte {
 	var header []byte
 	header = append(header, 0x00, 0x00, 0x00)
 
@@ -31,7 +31,7 @@ func (h *Socks5UDPHeader) Bytes() []byte {
 	return header
 }
 
-func (h *Socks5UDPHeader) DST() string {
+func (h *Socks5UDPAssociateHeader) DST() string {
 	var host string
 
 	switch h.atyp {
@@ -46,8 +46,8 @@ func (h *Socks5UDPHeader) DST() string {
 	return net.JoinHostPort(host, strconv.Itoa(int(port)))
 }
 
-func BuildSocks5UDPHeader(addr string) (*Socks5UDPHeader, error) {
-	var header Socks5UDPHeader
+func BuildSocks5UDPHeader(addr string) (*Socks5UDPAssociateHeader, error) {
+	var header Socks5UDPAssociateHeader
 
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -78,12 +78,12 @@ func BuildSocks5UDPHeader(addr string) (*Socks5UDPHeader, error) {
 	return &header, nil
 }
 
-func ParseUDPPacket(packet []byte) (*Socks5UDPHeader, []byte, error) {
+func ParseUDPPacket(packet []byte) (*Socks5UDPAssociateHeader, []byte, error) {
 	if len(packet) < 4 {
 		return nil, nil, fmt.Errorf("packet too short")
 	}
 
-	var header Socks5UDPHeader
+	var header Socks5UDPAssociateHeader
 	var payload []byte
 	header.atyp = packet[3]
 

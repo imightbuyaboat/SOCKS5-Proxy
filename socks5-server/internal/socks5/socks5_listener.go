@@ -20,24 +20,24 @@ func NewSOCKS5Listener(config *config.Config, logger *zap.Logger) *SOCKS5Listene
 }
 
 func (s *SOCKS5Listener) Start() {
-	listener, err := net.Listen("tcp", s.config.ListenAddress)
+	listener, err := net.Listen("tcp", s.config.SOCKS5ServerAddress)
 	if err != nil {
 		s.logger.Fatal("failed to start SOCKS5Listener on",
-			zap.String("address", s.config.ListenAddress),
+			zap.String("socks5_server_address", s.config.SOCKS5ServerAddress),
 			zap.Error(err))
 	}
 	s.logger.Info("SOCKS5 proxy listening on",
-		zap.String("address", s.config.ListenAddress))
+		zap.String("socks5_server_address", s.config.SOCKS5ServerAddress))
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			s.logger.Error("failed to accept connection",
+			s.logger.Error("failed to accept connection from client",
 				zap.Error(err))
 			continue
 		}
 		s.logger.Info("successfully accepted conncetion",
-			zap.String("address", conn.RemoteAddr().String()))
+			zap.String("client_address", conn.RemoteAddr().String()))
 
 		go s.handleConnection(conn)
 	}

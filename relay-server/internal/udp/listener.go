@@ -20,24 +20,24 @@ func NewUDPAssociateListener(config *config.Config, logger *zap.Logger) *UDPAsso
 }
 
 func (l *UDPAssociateListener) Start() {
-	listener, err := net.Listen("tcp", l.config.RemoteUDPAddress)
+	listener, err := net.Listen("tcp", l.config.UDPRelayServerAddress)
 	if err != nil {
 		l.logger.Fatal("failed to start UDPAssociateListener on",
-			zap.String("address", l.config.RemoteUDPAddress),
+			zap.String("udp_relay_server_address", l.config.UDPRelayServerAddress),
 			zap.Error(err))
 	}
 	l.logger.Info("UDPAssociateListener listening on",
-		zap.String("address", l.config.RemoteUDPAddress))
+		zap.String("udp_relay_server_address", l.config.UDPRelayServerAddress))
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			l.logger.Error("failed to accept connection",
+			l.logger.Error("failed to accept connection from socks5-server",
 				zap.Error(err))
 			continue
 		}
 		l.logger.Info("successfully accepted connection",
-			zap.String("address", conn.RemoteAddr().String()))
+			zap.String("socks5_server_address", conn.RemoteAddr().String()))
 
 		go l.handleUDPRelay(conn)
 	}
