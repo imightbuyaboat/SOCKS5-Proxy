@@ -26,7 +26,8 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	if err = parser.ParseHandshake(buf[:n]); err != nil {
+	method, err := parser.ParseHandshake(buf[:n], s.config.AllowNoAuth)
+	if err != nil {
 		if errors.Is(err, parser.ErrNoAcceptableMethods) {
 			conn.Write([]byte{0x05, 0xFF})
 			s.logger.Error("no acceptable methods",
@@ -41,7 +42,42 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	conn.Write([]byte{0x05, 0x00})
+	switch method {
+	// no auth
+	case 0x00:
+		conn.Write([]byte{0x05, 0x00})
+
+	// auth
+	case 0x02:
+		conn.Write([]byte{0x05, 0x02})
+
+		n, err = conn.Read(buf)
+		if err != nil {
+			s.logger.Error("failed to read auth request",
+				zap.String("client_address", conn.RemoteAddr().String()),
+				zap.Error(err))
+			return
+		}
+
+		user, err := parser.ParseAuthRequest(buf[:n])
+		if err != nil {
+			conn.Write([]byte{0x01, 0x01})
+			s.logger.Error("invalid auth request",
+				zap.String("client_address", conn.RemoteAddr().String()),
+				zap.Error(err))
+			return
+		}
+
+		if err = s.storage.CheckUser(user); err != nil {
+			conn.Write([]byte{0x01, 0x01})
+			s.logger.Error("invalid auth request",
+				zap.String("client_address", conn.RemoteAddr().String()),
+				zap.Error(err))
+			return
+		}
+
+		conn.Write([]byte{0x01, 0x00})
+	}
 
 	// connect request
 	n, err = conn.Read(buf)

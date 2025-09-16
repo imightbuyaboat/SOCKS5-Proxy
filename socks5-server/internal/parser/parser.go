@@ -3,37 +3,72 @@ package parser
 import (
 	"fmt"
 	"net"
+
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/user"
 )
 
-func ParseHandshake(req []byte) error {
+func ParseHandshake(req []byte, allowNoAuth bool) (byte, error) {
 	if len(req) < 3 {
-		return fmt.Errorf("invalid handshake request")
+		return 0x00, fmt.Errorf("invalid handshake request")
 	}
 
 	ver := req[0]
 	nMethods := int(req[1])
 
 	if ver != 0x05 {
-		return fmt.Errorf("invalid version in handshake request")
+		return 0x00, fmt.Errorf("invalid version in handshake request")
 	}
 	if nMethods < 1 || len(req) < 2+nMethods {
-		return fmt.Errorf("invalid nMethods in handshake request")
+		return 0x00, fmt.Errorf("invalid nMethods in handshake request")
 	}
 
-	// ищем метод без аутентификации (0x00)
+	// ищем метод без аутентификации (0x00) или с аутентификацией (0x02)
 	hasNoAuth := false
 	for i := 0; i < nMethods; i++ {
-		if req[2+i] == 0x00 {
-			hasNoAuth = true
-			break
+		switch req[2+i] {
+		case 0x00:
+			if allowNoAuth {
+				hasNoAuth = true
+			}
+
+		case 0x02:
+			return 0x02, nil
 		}
 	}
 
-	if !hasNoAuth {
-		return ErrNoAcceptableMethods
+	if hasNoAuth {
+		return 0x00, nil
 	}
 
-	return nil
+	return 0x00, ErrNoAcceptableMethods
+}
+
+func ParseAuthRequest(req []byte) (*user.User, error) {
+	if len(req) < 5 {
+		return nil, fmt.Errorf("invalid auth request")
+	}
+
+	ver := req[0]
+	if ver != 0x01 {
+		return nil, fmt.Errorf("invalid auth request")
+	}
+
+	uLen := int(req[1])
+	if len(req) < 3+uLen {
+		return nil, fmt.Errorf("invalid auth request")
+	}
+	uName := req[2 : 2+uLen]
+
+	pLen := int(req[2+uLen])
+	if len(req) != 3+uLen+pLen {
+		return nil, fmt.Errorf("invalid auth request")
+	}
+	passwd := req[3+uLen:]
+
+	return &user.User{
+		Username: string(uName),
+		Password: string(passwd),
+	}, nil
 }
 
 func ParseConnectRequest(req []byte) (byte, string, error) {

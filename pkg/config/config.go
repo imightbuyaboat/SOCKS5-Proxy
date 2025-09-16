@@ -12,6 +12,7 @@ type Config struct {
 	SOCKS5ServerAddress   string `json:"socks5_server_address"`
 	TCPRelayServerAddress string `json:"tcp_relay_server_address"`
 	UDPRelayServerAddress string `json:"udp_relay_server_address"`
+	AllowNoAuth           bool   `json:"allow_no_auth"`
 }
 
 func LoadConfig() (*Config, error) {

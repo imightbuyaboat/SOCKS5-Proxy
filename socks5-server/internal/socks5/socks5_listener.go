@@ -9,13 +9,17 @@ import (
 
 type SOCKS5Listener struct {
 	config *config.Config
+
 	logger *zap.Logger
+
+	storage Storage
 }
 
-func NewSOCKS5Listener(config *config.Config, logger *zap.Logger) *SOCKS5Listener {
+func NewSOCKS5Listener(config *config.Config, logger *zap.Logger, storage Storage) *SOCKS5Listener {
 	return &SOCKS5Listener{
-		config: config,
-		logger: logger,
+		config:  config,
+		logger:  logger,
+		storage: storage,
 	}
 }
 

@@ -1,5 +1,6 @@
 {
     "socks5_server_address": "0.0.0.0:1080",
     "tcp_relay_server_address": "0.0.0.0:1081",
-    "udp_relay_server_address": "0.0.0.0:1082"
+    "udp_relay_server_address": "0.0.0.0:1082",
+    "allow_no_auth": false
 }

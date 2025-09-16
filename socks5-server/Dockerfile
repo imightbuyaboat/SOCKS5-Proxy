@@ -16,5 +16,6 @@ WORKDIR /app
 
 COPY --from=builder /SOCKS5-proxy/socks5-server/main .
 COPY config.json .
+COPY .env .
 
 CMD ["./main"]
