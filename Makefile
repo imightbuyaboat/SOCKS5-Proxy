@@ -1,9 +1,8 @@
-include .env
-export $(shell sed 's/=.*//' .env)
-
 .PHONY: socks5-server-up relay-server-up socks5-server-down relay-server-down
 
 socks5-server-up:
+	set -a; . $(CURDIR)/.env; set +a;
+
 	docker run -d \
 		--name db \
 		--network host \

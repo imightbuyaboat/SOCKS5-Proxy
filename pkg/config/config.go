@@ -13,6 +13,8 @@ type Config struct {
 	TCPRelayServerAddress string `json:"tcp_relay_server_address"`
 	UDPRelayServerAddress string `json:"udp_relay_server_address"`
 	AllowNoAuth           bool   `json:"allow_no_auth"`
+	SOCKS5WebGUIPort      int    `json:"socks5_web_gui_port"`
+	RelayWebGUIPort       int    `json:"relay_web_gui_port"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -35,20 +37,26 @@ func LoadConfig() (*Config, error) {
 }
 
 func (c *Config) validateConfig() error {
-	if err := validateAddress(c.SOCKS5ServerAddress); err != nil {
+	if err := ValidateAddress(c.SOCKS5ServerAddress); err != nil {
 		return err
 	}
-	if err := validateAddress(c.TCPRelayServerAddress); err != nil {
+	if err := ValidateAddress(c.TCPRelayServerAddress); err != nil {
 		return err
 	}
-	if err := validateAddress(c.UDPRelayServerAddress); err != nil {
+	if err := ValidateAddress(c.UDPRelayServerAddress); err != nil {
 		return err
+	}
+	if c.SOCKS5WebGUIPort < 0 || c.SOCKS5WebGUIPort > 65535 {
+		return fmt.Errorf("invalid socks5_web_gui_port")
+	}
+	if c.RelayWebGUIPort < 0 || c.RelayWebGUIPort > 65535 {
+		return fmt.Errorf("invalid relay_web_gui_port")
 	}
 
 	return nil
 }
 
-func validateAddress(addr string) error {
+func ValidateAddress(addr string) error {
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		return err

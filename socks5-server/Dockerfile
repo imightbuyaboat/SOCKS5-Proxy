@@ -15,6 +15,9 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /SOCKS5-proxy/socks5-server/main .
+COPY --from=builder /SOCKS5-proxy/socks5-server/internal/web_gui/template ./template
+COPY --from=builder /SOCKS5-proxy/socks5-server/internal/web_gui/static ./static
+
 COPY config.json .
 COPY .env .
 

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SOCKS5 Proxy Control</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>SOCKS5 Server Control Panel</h1>
+
+    <div id="message" class="message"></div>
+
+    <form id="configForm">
+      <label>
+        SOCKS5 Server Address:
+        <input type="text" id="socks5_server_address" value="{{.SOCKS5ServerAddress}}">
+      </label>
+      <label>
+        TCP Relay Address:
+        <input type="text" id="tcp_relay_server_address" value="{{.TCPRelayServerAddress}}">
+      </label>
+      <label>
+        UDP Relay Address:
+        <input type="text" id="udp_relay_server_address" value="{{.UDPRelayServerAddress}}">
+      </label>
+      <label>
+        Allow No Auth:
+        <input type="checkbox" id="allow_no_auth" {{if .AllowNoAuth}}checked{{end}}>
+      </label>
+      <button type="button" id="saveBtn">Save</button>
+    </form>
+
+    <div class="controls">
+      <button id="startBtn">Start Proxy</button>
+      <button id="stopBtn">Stop Proxy</button>
+      <button id="logsBtn">Show Logs</button>
+      <button id="clearLogsBtn">Clear Logs</button>
+    </div>
+
+    <div id="logsModal" class="modal">
+      <div class="modal-content">
+        <span id="closeLogs" class="close">&times;</span>
+        <h2>Logs</h2>
+        <pre id="logsOutput"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

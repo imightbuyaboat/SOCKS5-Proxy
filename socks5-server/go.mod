@@ -5,6 +5,7 @@ go 1.24.4
 replace github.com/imightbuyaboat/SOCKS5-Proxy/pkg => ../pkg
 
 require (
+	github.com/gorilla/mux v1.8.1
 	github.com/imightbuyaboat/SOCKS5-Proxy/pkg v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1

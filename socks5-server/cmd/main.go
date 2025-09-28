@@ -7,6 +7,7 @@ import (
 
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/postgres"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/socks5"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/web_gui"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/logger"
 	"github.com/joho/godotenv"
@@ -38,5 +39,7 @@ func main() {
 	}
 
 	listener := socks5.NewSOCKS5Listener(config, zapLogger, postgresStorage)
-	listener.Start()
+
+	var ui UI = web_gui.NewWebGUI(config.SOCKS5WebGUIPort, listener)
+	ui.Start()
 }

@@ -15,6 +15,9 @@ FROM alpine:latest
 WORKDIR /app
 
 COPY --from=builder /SOCKS5-proxy/relay-server/main .
+COPY --from=builder /SOCKS5-proxy/relay-server/internal/web_gui/template ./template
+COPY --from=builder /SOCKS5-proxy/relay-server/internal/web_gui/static ./static
+
 COPY config.json .
 
 CMD ["./main"]

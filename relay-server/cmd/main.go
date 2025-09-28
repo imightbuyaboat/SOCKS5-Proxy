@@ -5,6 +5,7 @@ import (
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/logger"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/tcp"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/udp"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/web_gui"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +19,9 @@ func main() {
 			zap.Error(err))
 	}
 
-	go tcp.NewTCPAssociateListener(config, zapLogger).Start()
-	udp.NewUDPAssociateListener(config, zapLogger).Start()
+	listenerTCP := tcp.NewTCPAssociateListener(config, zapLogger)
+	listenerUDP := udp.NewUDPAssociateListener(config, zapLogger)
+
+	var ui UI = web_gui.NewWebGUI(config.RelayWebGUIPort, listenerTCP, listenerUDP)
+	ui.Start()
 }
