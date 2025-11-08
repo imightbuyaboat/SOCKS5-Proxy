@@ -1,23 +1,26 @@
 package socks5
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net"
+	"time"
 
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/parser"
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/tcp"
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/udp"
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"go.uber.org/zap"
 )
 
-func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
+func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
+	defer s.wg.Done()
 	defer conn.Close()
 
-	buf := make([]byte, block.BLOCK_SIZE)
+	buf := make([]byte, constants.BLOCK_SIZE)
 
 	// handshake request
+	s.setReadDeadline(conn, constants.ReadWriteTimeout)
 	n, err := conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read handshake request",
@@ -25,8 +28,12 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 			zap.Error(err))
 		return
 	}
+	s.clearReadDeadline(conn)
 
-	method, err := parser.ParseHandshake(buf[:n], s.config.AllowNoAuth)
+	s.logger.Debug("successfully read handhsake request",
+		zap.String("client_address", conn.RemoteAddr().String()))
+
+	method, err := s.p.ParseHandshake(buf[:n], s.config.AllowNoAuth)
 	if err != nil {
 		if errors.Is(err, parser.ErrNoAcceptableMethods) {
 			conn.Write([]byte{0x05, 0xFF})
@@ -42,44 +49,17 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	switch method {
-	// no auth
-	case 0x00:
-		conn.Write([]byte{0x05, 0x00})
-
-	// auth
-	case 0x02:
-		conn.Write([]byte{0x05, 0x02})
-
-		n, err = conn.Read(buf)
-		if err != nil {
-			s.logger.Error("failed to read auth request",
-				zap.String("client_address", conn.RemoteAddr().String()),
-				zap.Error(err))
-			return
-		}
-
-		user, err := parser.ParseAuthRequest(buf[:n])
-		if err != nil {
-			conn.Write([]byte{0x01, 0x01})
-			s.logger.Error("invalid auth request",
-				zap.String("client_address", conn.RemoteAddr().String()),
-				zap.Error(err))
-			return
-		}
-
-		if err = s.storage.CheckUser(user); err != nil {
-			conn.Write([]byte{0x01, 0x01})
-			s.logger.Error("invalid auth request",
-				zap.String("client_address", conn.RemoteAddr().String()),
-				zap.Error(err))
-			return
-		}
-
-		conn.Write([]byte{0x01, 0x00})
+	if err := s.handleAuthMethod(ctx, conn, method, buf); err != nil {
+		s.logger.Error("failed to handle auth method from hanshake request",
+			zap.String("client_address", conn.RemoteAddr().String()), zap.ByteString("method", []byte{method}))
+		return
 	}
 
+	s.logger.Debug("successfully parse handhsake request",
+		zap.String("client_address", conn.RemoteAddr().String()))
+
 	// connect request
+	s.setReadDeadline(conn, constants.ReadWriteTimeout)
 	n, err = conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read connect request",
@@ -87,8 +67,12 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 			zap.Error(err))
 		return
 	}
+	s.clearReadDeadline(conn)
 
-	cmd, targetAddr, err := parser.ParseConnectRequest(buf[:n])
+	s.logger.Debug("successfully read connect request",
+		zap.String("client_address", conn.RemoteAddr().String()))
+
+	cmd, targetAddr, err := s.p.ParseConnectRequest(buf[:n])
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -105,33 +89,18 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		remoteAddr = s.config.TCPRelayServerAddress
 	case 0x03:
 		remoteAddr = s.config.UDPRelayServerAddress
-	}
+	default:
+		s.logger.Error("unexpected cmd in connect request",
+			zap.String("client_address", conn.RemoteAddr().String()), zap.ByteString("cmd", []byte{cmd}))
 
-	// подключение к relay-серверу
-	remoteConn, err := createRemoteConnectionToRelayServer(remoteAddr)
-	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-
-		s.logger.Error("failed to create connection to relay-server",
-			zap.String("relay_server_address", remoteAddr),
-			zap.Error(err))
-		return
-	}
-	defer remoteConn.Close()
-
-	// генерируем ключ
-	key, err := crypto.GenerateSharedSecret(remoteConn, true)
-	if err != nil {
-		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-
-		s.logger.Error("failed to generate shared secret",
-			zap.String("relay_server_address", remoteAddr),
-			zap.Error(err))
 		return
 	}
 
-	// создаем защищенное подключение
-	secureRemoteConn, err := crypto.NewSecureConn(remoteConn, key)
+	s.logger.Debug("successfully parse connect request",
+		zap.String("client_address", conn.RemoteAddr().String()))
+
+	secureRemoteConn, err := s.createSecureRemoteConnToRelayServer(ctx, remoteAddr)
 	if err != nil {
 		conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 
@@ -141,15 +110,112 @@ func (s *SOCKS5Listener) handleConnection(conn net.Conn) {
 		return
 	}
 
-	s.logger.Info("successfully create remote connection to relay-server",
+	s.logger.Info("successfully create secure remote connection to relay-server",
 		zap.String("relay_server_address", remoteAddr))
 
 	// вызов обработчика
 	switch cmd {
 	case 0x01:
-		tcp.NewTCPAssociateHandler(s.logger).HandleTCPAssociateConn(targetAddr, secureRemoteConn, conn)
+		s.tcpAssociateHandler.HandleTCPAssociateConn(ctx, targetAddr, secureRemoteConn, conn)
 
 	case 0x03:
-		udp.NewUDPAssociateHandler(s.logger).HandleUDPAssociateConn(secureRemoteConn, conn)
+		s.udpAssociateHandler.HandleUDPAssociateConn(ctx, secureRemoteConn, conn)
 	}
+}
+
+func (s *SOCKS5Listener) handleAuthMethod(ctx context.Context, conn net.Conn, method byte, buf []byte) error {
+	switch method {
+	case 0x00: // no auth
+		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
+			s.logger.Error("failed to write no-auth response", zap.Error(err))
+			return err
+		}
+		s.clearWriteDeadline(conn)
+
+	case 0x02: // auth
+		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		if _, err := conn.Write([]byte{0x05, 0x02}); err != nil {
+			s.logger.Error("failed to write auth method response", zap.Error(err))
+			s.clearWriteDeadline(conn)
+			return err
+		}
+		s.clearWriteDeadline(conn)
+
+		// read auth request
+		s.setReadDeadline(conn, constants.ReadWriteTimeout)
+		n, err := conn.Read(buf)
+		if err != nil {
+			s.logger.Error("failed to read auth request", zap.Error(err))
+			s.clearReadDeadline(conn)
+			return err
+		}
+		s.clearReadDeadline(conn)
+
+		user, err := s.p.ParseAuthRequest(buf[:n])
+		if err != nil {
+			conn.Write([]byte{0x01, 0x01})
+			s.logger.Error("invalid auth request", zap.Error(err))
+			return err
+		}
+
+		if err = s.storage.CheckUser(ctx, user); err != nil {
+			conn.Write([]byte{0x01, 0x01})
+			s.logger.Error("user authentication failed", zap.Error(err))
+			return err
+		}
+
+		// send auth success
+		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		if _, err := conn.Write([]byte{0x01, 0x00}); err != nil {
+			s.logger.Error("failed to write auth success response", zap.Error(err))
+			s.clearWriteDeadline(conn)
+			return err
+		}
+		s.clearWriteDeadline(conn)
+
+	default:
+		conn.Write([]byte{0x05, 0xFF})
+		return errors.New("unsupported auth method")
+	}
+
+	return nil
+}
+
+func (s *SOCKS5Listener) createSecureRemoteConnToRelayServer(ctx context.Context, remoteAddr string) (*crypto.SecureConn, error) {
+	// подключение к relay-серверу
+	remoteConn, err := createRemoteConnectionToRelayServer(ctx, remoteAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create remote connection: %v", err)
+	}
+
+	// генерируем ключ
+	key, err := crypto.GenerateSharedSecret(ctx, remoteConn, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate shared secret: %v", err)
+	}
+
+	// создаем защищенное подключение
+	secureRemoteConn, err := crypto.NewSecureConn(remoteConn, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secure connection to relay-server: %v", err)
+	}
+
+	return secureRemoteConn, nil
+}
+
+func (s *SOCKS5Listener) setReadDeadline(conn net.Conn, timeout time.Duration) {
+	conn.SetReadDeadline(time.Now().Add(timeout))
+}
+
+func (s *SOCKS5Listener) clearReadDeadline(conn net.Conn) {
+	conn.SetReadDeadline(time.Time{})
+}
+
+func (s *SOCKS5Listener) setWriteDeadline(conn net.Conn, timeout time.Duration) {
+	conn.SetWriteDeadline(time.Now().Add(timeout))
+}
+
+func (s *SOCKS5Listener) clearWriteDeadline(conn net.Conn) {
+	conn.SetWriteDeadline(time.Time{})
 }

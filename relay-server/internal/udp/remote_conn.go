@@ -1,19 +1,11 @@
 package udp
 
 import (
+	"context"
 	"net"
 )
 
-func createRemoteUDPConnection(targetAddr string) (net.Conn, error) {
-	addr, err := net.ResolveUDPAddr("udp", targetAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	remoteConn, err := net.DialUDP("udp", nil, addr)
-	if err != nil {
-		return nil, err
-	}
-
-	return remoteConn, nil
+func createRemoteUDPConnection(ctx context.Context, targetAddr string) (net.Conn, error) {
+	dialer := &net.Dialer{}
+	return dialer.DialContext(ctx, "udp", targetAddr)
 }

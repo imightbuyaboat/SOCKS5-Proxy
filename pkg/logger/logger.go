@@ -16,9 +16,19 @@ var (
 	logBuffer *bytes.Buffer
 )
 
-func InitLogger() {
+func InitLogger(logLevelStr string) {
 	once.Do(func() {
 		logBuffer = new(bytes.Buffer)
+
+		var logLevel zapcore.Level
+		switch logLevelStr {
+		case "INFO":
+			logLevel = zapcore.InfoLevel
+		case "DEBUG":
+			logLevel = zapcore.DebugLevel
+		default:
+			logLevel = zapcore.InfoLevel
+		}
 
 		config := zap.NewProductionConfig()
 		config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
@@ -29,13 +39,13 @@ func InitLogger() {
 		consoleCore := zapcore.NewCore(
 			zapcore.NewJSONEncoder(config.EncoderConfig),
 			zapcore.AddSync(os.Stdout),
-			zapcore.InfoLevel,
+			logLevel,
 		)
 
 		bufferCore := zapcore.NewCore(
 			zapcore.NewJSONEncoder(config.EncoderConfig),
 			zapcore.AddSync(logBuffer),
-			zapcore.InfoLevel,
+			logLevel,
 		)
 
 		core := zapcore.NewTee(consoleCore, bufferCore)
@@ -46,7 +56,7 @@ func InitLogger() {
 
 func GetLogger() *zap.Logger {
 	if logger == nil {
-		InitLogger()
+		InitLogger("INFO")
 	}
 	return logger
 }

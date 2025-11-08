@@ -4,48 +4,58 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/socks5"
 )
 
-type WebGUI struct {
-	port int
-
-	temp *template.Template
-
-	listener *socks5.SOCKS5Listener
-
-	cancel context.CancelFunc
+type GUI interface {
+	Start() error
+	Shutdown(ctx context.Context) error
 }
 
-func NewWebGUI(port int, listener *socks5.SOCKS5Listener) *WebGUI {
-	temp := template.Must(template.ParseFiles("template/index.html"))
+type WebGUI struct {
+	portStr  string
+	temp     *template.Template
+	listener *socks5.SOCKS5Listener
+	srv      *http.Server
+	cancel   context.CancelFunc
+}
 
-	return &WebGUI{
-		port:     port,
+func NewWebGUI(port int, listener *socks5.SOCKS5Listener) GUI {
+	temp := template.Must(template.ParseFiles("template/index.html"))
+	portStr := fmt.Sprintf(":%d", port)
+
+	webGUI := &WebGUI{
+		portStr:  portStr,
 		temp:     temp,
 		listener: listener,
 	}
-}
-
-func (g *WebGUI) Start() {
-	portStr := fmt.Sprintf(":%d", g.port)
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", g.mainHandler).Methods("GET")
-	r.HandleFunc("/save", g.saveConfigHandler).Methods("POST")
-	r.HandleFunc("/start", g.startProxyHandler).Methods("POST")
-	r.HandleFunc("/stop", g.stopProxyHandler).Methods("POST")
-	r.HandleFunc("/logs", g.logsHandler).Methods("GET")
-	r.HandleFunc("/clear-logs", g.clearLogsHandler).Methods("POST")
+	r.HandleFunc("/", webGUI.mainHandler).Methods("GET")
+	r.HandleFunc("/save", webGUI.saveConfigHandler).Methods("POST")
+	r.HandleFunc("/start", webGUI.startProxyHandler).Methods("POST")
+	r.HandleFunc("/stop", webGUI.stopProxyHandler).Methods("POST")
+	r.HandleFunc("/logs", webGUI.logsHandler).Methods("GET")
+	r.HandleFunc("/clear-logs", webGUI.clearLogsHandler).Methods("POST")
 
 	fs := http.FileServer(http.Dir("./static"))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
 
-	if err := http.ListenAndServe(portStr, r); err != nil {
-		log.Fatal(err)
+	webGUI.srv = &http.Server{
+		Addr:    portStr,
+		Handler: r,
 	}
+
+	return webGUI
+}
+
+func (g *WebGUI) Start() error {
+	return g.srv.ListenAndServe()
+}
+
+func (g *WebGUI) Shutdown(ctx context.Context) error {
+	return g.srv.Shutdown(ctx)
 }

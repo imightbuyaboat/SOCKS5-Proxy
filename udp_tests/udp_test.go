@@ -1,4 +1,4 @@
-package socks5_tests
+package udp_tests
 
 import (
 	"bytes"

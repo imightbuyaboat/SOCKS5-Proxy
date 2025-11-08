@@ -1,14 +1,11 @@
 package tcp
 
 import (
+	"context"
 	"net"
 )
 
-func createRemoteTCPConnection(targetAddr string) (net.Conn, error) {
-	remoteConn, err := net.Dial("tcp", targetAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	return remoteConn, nil
+func createRemoteTCPConnection(ctx context.Context, targetAddr string) (net.Conn, error) {
+	dialer := &net.Dialer{}
+	return dialer.DialContext(ctx, "tcp", targetAddr)
 }

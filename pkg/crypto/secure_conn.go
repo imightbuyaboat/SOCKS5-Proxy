@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 	"net"
+	"time"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -74,6 +75,26 @@ func (s *SecureConn) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (s *SecureConn) CloseWrite() error {
+	if tcpConn, ok := s.conn.(*net.TCPConn); ok {
+		return tcpConn.CloseWrite()
+	}
+
+	return s.conn.Close()
+}
+
 func (s *SecureConn) Close() error {
 	return s.conn.Close()
+}
+
+func (s *SecureConn) SetReadDeadline(t time.Time) error {
+	return s.conn.SetReadDeadline(t)
+}
+
+func (s *SecureConn) SetWriteDeadline(t time.Time) error {
+	return s.conn.SetWriteDeadline(t)
+}
+
+func (s *SecureConn) RemoteAddr() net.Addr {
+	return s.conn.RemoteAddr()
 }

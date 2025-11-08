@@ -3,21 +3,25 @@ package tcp
 import (
 	"context"
 	"net"
+	"sync"
+	"time"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/logger"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/config"
 	"go.uber.org/zap"
 )
 
 type TCPAssociateListener struct {
-	config   *config.Config
-	logger   *zap.Logger
+	config   *config.TCPListenerConfig
 	listener net.Listener
+	wg       *sync.WaitGroup
+	logger   *zap.Logger
 }
 
-func NewTCPAssociateListener(config *config.Config, logger *zap.Logger) *TCPAssociateListener {
+func NewTCPAssociateListener(config *config.TCPListenerConfig, logger *zap.Logger) *TCPAssociateListener {
 	return &TCPAssociateListener{
 		config: config,
+		wg:     &sync.WaitGroup{},
 		logger: logger,
 	}
 }
@@ -25,13 +29,13 @@ func NewTCPAssociateListener(config *config.Config, logger *zap.Logger) *TCPAsso
 func (l *TCPAssociateListener) Start(ctx context.Context) {
 	listener, err := net.Listen("tcp", l.config.TCPRelayServerAddress)
 	if err != nil {
-		l.logger.Fatal("failed to start TCPAssociateListener on",
+		l.logger.Fatal("failed to start TCPAssociateListener",
 			zap.String("tcp_relay_server_address", l.config.TCPRelayServerAddress),
 			zap.Error(err))
 	}
 	l.listener = listener
 
-	l.logger.Info("TCPAssociateListener listening on",
+	l.logger.Info("TCPAssociateListener started",
 		zap.String("tcp_relay_server_address", l.config.TCPRelayServerAddress))
 
 	go func() {
@@ -45,6 +49,20 @@ func (l *TCPAssociateListener) Start(ctx context.Context) {
 		if err != nil {
 			select {
 			case <-ctx.Done():
+				l.logger.Info("waiting for active connections to finish")
+
+				done := make(chan struct{})
+				go func() {
+					l.wg.Wait()
+					close(done)
+				}()
+
+				select {
+				case <-done:
+					l.logger.Info("all connections closed")
+				case <-time.After(30 * time.Second):
+					l.logger.Warn("shutdown timeout")
+				}
 				return
 
 			default:
@@ -56,7 +74,8 @@ func (l *TCPAssociateListener) Start(ctx context.Context) {
 		l.logger.Info("successfully accepted connection",
 			zap.String("socks5_server_address", conn.RemoteAddr().String()))
 
-		go l.handleTCPRelay(conn)
+		l.wg.Add(1)
+		go l.handleTCPRelay(ctx, conn)
 	}
 }
 

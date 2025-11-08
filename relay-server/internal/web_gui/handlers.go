@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/config"
 )
 
 type GuiConfig struct {
@@ -15,8 +15,8 @@ type GuiConfig struct {
 
 func (g *WebGUI) getCurrentConfig() *GuiConfig {
 	return &GuiConfig{
-		TCPRelayServerAddress: g.listenerTCP.GetAddress(),
-		UDPRelayServerAddress: g.listenerUDP.GetAddress(),
+		TCPRelayServerAddress: g.tcpListener.GetAddress(),
+		UDPRelayServerAddress: g.udpListener.GetAddress(),
 	}
 }
 
@@ -64,8 +64,8 @@ func (g *WebGUI) saveConfigHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	g.listenerTCP.UpdateAddress(newConfig.TCPRelayServerAddress)
-	g.listenerUDP.UpdateAddress(newConfig.UDPRelayServerAddress)
+	g.tcpListener.UpdateAddress(newConfig.TCPRelayServerAddress)
+	g.udpListener.UpdateAddress(newConfig.UDPRelayServerAddress)
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"config updated"}`))
 }
@@ -80,10 +80,10 @@ func (g *WebGUI) startProxyHandler(w http.ResponseWriter, r *http.Request) {
 	g.cancel = cancel
 
 	go func() {
-		g.listenerTCP.Start(ctx)
+		g.tcpListener.Start(ctx)
 	}()
 	go func() {
-		g.listenerUDP.Start(ctx)
+		g.udpListener.Start(ctx)
 	}()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -106,7 +106,7 @@ func (g *WebGUI) stopProxyHandler(w http.ResponseWriter, r *http.Request) {
 func (g *WebGUI) logsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(
-		map[string]string{"logs": g.listenerTCP.GetLogs()},
+		map[string]string{"logs": g.tcpListener.GetLogs()},
 	); err != nil {
 		http.Error(w, `{"error":"error while getting logs"}`, http.StatusInternalServerError)
 		return
@@ -114,7 +114,7 @@ func (g *WebGUI) logsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *WebGUI) clearLogsHandler(w http.ResponseWriter, r *http.Request) {
-	g.listenerTCP.ClearLogs()
+	g.tcpListener.ClearLogs()
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{"status":"logs cleared"}`))
 }

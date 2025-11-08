@@ -5,23 +5,41 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/user"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+var (
+	checkUserQuery = `
+		select password_hash
+		from users
+		where username = $1`
+
+	checkUserQueryName = "check_user"
+)
+
 type PostgreStorage struct {
 	pool *pgxpool.Pool
-	ctx  context.Context
 }
 
-func NewPostgresStorage(ctx context.Context, url string) (*PostgreStorage, error) {
+func NewPostgresStorage(ctx context.Context, url, migrationsPath string) (models.Storage, error) {
+	if err := migrateDB(url, migrationsPath); err != nil {
+		return nil, err
+	}
+
 	config, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, err
 	}
 	config.MaxConns = 100
 	config.MinConns = 10
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		if _, err := conn.Prepare(ctx, checkUserQueryName, checkUserQuery); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
@@ -32,30 +50,21 @@ func NewPostgresStorage(ctx context.Context, url string) (*PostgreStorage, error
 		return nil, err
 	}
 
-	query := `create table if not exists users (
-				id serial primary key,
-				username text,
-				password_hash text not null
-				);`
-
-	if _, err = pool.Exec(ctx, query); err != nil {
-		return nil, err
+	ps := &PostgreStorage{
+		pool: pool,
 	}
 
-	return &PostgreStorage{pool, ctx}, nil
+	go func() {
+		<-ctx.Done()
+		ps.pool.Close()
+	}()
+
+	return ps, nil
 }
 
-func (s *PostgreStorage) CheckUser(u *user.User) error {
-	query := `select password_hash
-				from users
-				where username = @username;`
-
-	args := pgx.NamedArgs{
-		"username": u.Username,
-	}
-
+func (s *PostgreStorage) CheckUser(ctx context.Context, u *models.User) error {
 	var hashFromDB string
-	if err := s.pool.QueryRow(s.ctx, query, args).Scan(&hashFromDB); err != nil {
+	if err := s.pool.QueryRow(ctx, checkUserQueryName, u.Username).Scan(&hashFromDB); err != nil {
 		if err == pgx.ErrNoRows {
 			return ErrUserNotExists
 		}

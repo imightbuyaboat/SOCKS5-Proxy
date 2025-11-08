@@ -17,8 +17,9 @@ WORKDIR /app
 COPY --from=builder /SOCKS5-proxy/socks5-server/main .
 COPY --from=builder /SOCKS5-proxy/socks5-server/internal/web_gui/template ./template
 COPY --from=builder /SOCKS5-proxy/socks5-server/internal/web_gui/static ./static
+COPY --from=builder /SOCKS5-proxy/socks5-server/internal/postgres/migrations ./etc/migrations
+COPY --from=builder /SOCKS5-proxy/socks5-server/config.json .
 
-COPY config.json .
 COPY .env .
 
 CMD ["./main"]

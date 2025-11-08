@@ -1,10 +1,11 @@
 package socks5
 
 import (
+	"context"
 	"net"
 )
 
-func createRemoteConnectionToRelayServer(remoteAddr string) (net.Conn, error) {
+func createRemoteConnectionToRelayServer(ctx context.Context, remoteAddr string) (net.Conn, error) {
 	// заглушка для docker
 	if remoteAddr == "0.0.0.0:1081" {
 		remoteAddr = "172.17.0.1:1081"
@@ -12,10 +13,6 @@ func createRemoteConnectionToRelayServer(remoteAddr string) (net.Conn, error) {
 		remoteAddr = "172.17.0.1:1082"
 	}
 
-	remoteConn, err := net.Dial("tcp", remoteAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	return remoteConn, nil
+	dialer := &net.Dialer{}
+	return dialer.DialContext(ctx, "tcp", remoteAddr)
 }

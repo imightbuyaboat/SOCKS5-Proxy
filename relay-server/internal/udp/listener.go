@@ -3,20 +3,24 @@ package udp
 import (
 	"context"
 	"net"
+	"sync"
+	"time"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/config"
 	"go.uber.org/zap"
 )
 
 type UDPAssociateListener struct {
-	config   *config.Config
-	logger   *zap.Logger
+	config   *config.UDPListenerConfig
 	listener net.Listener
+	wg       *sync.WaitGroup
+	logger   *zap.Logger
 }
 
-func NewUDPAssociateListener(config *config.Config, logger *zap.Logger) *UDPAssociateListener {
+func NewUDPAssociateListener(config *config.UDPListenerConfig, logger *zap.Logger) *UDPAssociateListener {
 	return &UDPAssociateListener{
 		config: config,
+		wg:     &sync.WaitGroup{},
 		logger: logger,
 	}
 }
@@ -24,13 +28,13 @@ func NewUDPAssociateListener(config *config.Config, logger *zap.Logger) *UDPAsso
 func (l *UDPAssociateListener) Start(ctx context.Context) {
 	listener, err := net.Listen("tcp", l.config.UDPRelayServerAddress)
 	if err != nil {
-		l.logger.Fatal("failed to start UDPAssociateListener on",
+		l.logger.Fatal("failed to start UDPAssociateListener",
 			zap.String("udp_relay_server_address", l.config.UDPRelayServerAddress),
 			zap.Error(err))
 	}
 	l.listener = listener
 
-	l.logger.Info("UDPAssociateListener listening on",
+	l.logger.Info("UDPAssociateListener started",
 		zap.String("udp_relay_server_address", l.config.UDPRelayServerAddress))
 
 	go func() {
@@ -44,6 +48,20 @@ func (l *UDPAssociateListener) Start(ctx context.Context) {
 		if err != nil {
 			select {
 			case <-ctx.Done():
+				l.logger.Info("waiting for active connections to finish")
+
+				done := make(chan struct{})
+				go func() {
+					l.wg.Wait()
+					close(done)
+				}()
+
+				select {
+				case <-done:
+					l.logger.Info("all connections closed")
+				case <-time.After(30 * time.Second):
+					l.logger.Warn("shutdown timeout")
+				}
 				return
 
 			default:
@@ -55,7 +73,8 @@ func (l *UDPAssociateListener) Start(ctx context.Context) {
 		l.logger.Info("successfully accepted connection",
 			zap.String("socks5_server_address", conn.RemoteAddr().String()))
 
-		go l.handleUDPRelay(conn)
+		l.wg.Add(1)
+		go l.handleUDPRelay(ctx, conn)
 	}
 }
 

@@ -1,46 +1,66 @@
 package udp
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net"
+	"time"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/block"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/udp_associate"
 	"go.uber.org/zap"
 )
 
-func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
+func (l *UDPAssociateListener) handleUDPRelay(ctx context.Context, conn net.Conn) {
+	defer l.wg.Done()
 	defer conn.Close()
 
-	// генерируем разделяесый секрет
-	key, err := crypto.GenerateSharedSecret(conn, false)
-	if err != nil {
-		l.logger.Error("failed to generate shared secret",
-			zap.String("socks5_server_address", conn.RemoteAddr().String()),
-			zap.Error(err))
-		return
-	}
+	go func() {
+		<-ctx.Done()
+		conn.Close()
+	}()
 
 	// устанавливаем защищенное соединение с socks5-сервером
-	secureConn, err := crypto.NewSecureConn(conn, key)
+	secureConn, err := l.createSecureConnToSOCK5Server(ctx, conn)
 	if err != nil {
-		l.logger.Error("failed to create secure connection",
+		l.logger.Error("failed to create secure conn to SOCKS5 server",
 			zap.String("socks5_server_address", conn.RemoteAddr().String()),
 			zap.Error(err))
 		return
 	}
 
 	for {
-		buf := make([]byte, block.BLOCK_SIZE)
+		select {
+		case <-ctx.Done():
+			l.logger.Info("context cancelled, stopping UDP relay")
+			return
+		default:
+		}
+
+		buf := make([]byte, constants.BLOCK_SIZE)
 
 		// читаем пакет
+		secureConn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
 		n, err := secureConn.Read(buf)
 		if err != nil {
+			if err == io.EOF {
+				l.logger.Debug("client closed connection")
+				return
+			}
+
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				l.logger.Debug("idle timeout, closing connection")
+				return
+			}
+
 			l.logger.Error("failed to read UDP packet",
 				zap.String("socks5_server_address", conn.RemoteAddr().String()),
 				zap.Error(err))
 			return
 		}
+		secureConn.SetReadDeadline(time.Time{})
 
 		// парсим пакет
 		header, payload, err := udp_associate.ParseUDPPacket(buf[:n])
@@ -59,54 +79,93 @@ func (l *UDPAssociateListener) handleUDPRelay(conn net.Conn) {
 			zap.String("target_address", dstAddr))
 
 		// устанавливаем соедниние с целевым адресом
-		remoteConn, err := createRemoteUDPConnection(dstAddr)
+		remoteConn, err := createRemoteUDPConnection(ctx, dstAddr)
 		if err != nil {
 			l.logger.Error("failed to create connection",
 				zap.String("target_address", dstAddr),
 				zap.Error(err))
 			return
 		}
-		defer remoteConn.Close()
 
-		l.logger.Info("successfully create connection to target server",
-			zap.String("target_address", dstAddr))
+		err = l.handleSingleUDPExchange(ctx, secureConn, remoteConn, header, payload, dstAddr)
+		remoteConn.Close()
 
-		// отправляем полезную нагрузку
-		_, err = remoteConn.Write(payload)
 		if err != nil {
-			l.logger.Error("failed to write payload to connection",
-				zap.String("target_address", dstAddr),
-				zap.Error(err))
 			return
 		}
+	}
+}
 
-		repsonse := make([]byte, block.BLOCK_SIZE)
+func (l *UDPAssociateListener) handleSingleUDPExchange(ctx context.Context, secureConn *crypto.SecureConn, remoteConn net.Conn, header *udp_associate.Socks5UDPAssociateHeader, payload []byte, dstAddr string) error {
+	// Закрываем remoteConn при отмене контекста
+	go func() {
+		<-ctx.Done()
+		remoteConn.Close()
+	}()
 
-		// читаем полезную нагрузку
-		n, err = remoteConn.Read(repsonse)
-		if err != nil {
+	// отправляем полезную нагрузку
+	remoteConn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
+	_, err := remoteConn.Write(payload)
+	if err != nil {
+		l.logger.Error("failed to write payload to connection",
+			zap.String("target_address", dstAddr),
+			zap.Error(err))
+		return err
+	}
+	remoteConn.SetWriteDeadline(time.Time{})
+
+	response := make([]byte, constants.BLOCK_SIZE)
+
+	// читаем ответ
+	remoteConn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
+	n, err := remoteConn.Read(response)
+	if err != nil {
+		select {
+		case <-ctx.Done():
+			l.logger.Info("read from target interrupted by context cancellation")
+			return err
+		default:
 			l.logger.Error("failed to read data from target server",
 				zap.String("target_address", dstAddr),
 				zap.Error(err))
-			return
+			return err
 		}
-
-		l.logger.Info("read response from target server",
-			zap.Int("length", n))
-
-		var packet []byte
-		packet = append(packet, header.Bytes()...)
-		packet = append(packet, repsonse[:n]...)
-
-		// отправляем пакет socks5-серверу
-		_, err = secureConn.Write(packet)
-		if err != nil {
-			l.logger.Error("failed to write to socks5-server",
-				zap.Error(err))
-			return
-		}
-
-		l.logger.Info("successfully send packet to socks5-server",
-			zap.String("socks5_server_address", conn.RemoteAddr().String()))
 	}
+	remoteConn.SetReadDeadline(time.Time{})
+
+	l.logger.Info("read response from target server", zap.Int("length", n))
+
+	var packet []byte
+	packet = append(packet, header.Bytes()...)
+	packet = append(packet, response[:n]...)
+
+	// отправляем пакет socks5-серверу
+	secureConn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
+	_, err = secureConn.Write(packet)
+	if err != nil {
+		l.logger.Error("failed to write to socks5-server", zap.Error(err))
+		return err
+	}
+	secureConn.SetWriteDeadline(time.Time{})
+
+	l.logger.Info("successfully send packet to socks5-server",
+		zap.String("socks5_server_address", secureConn.RemoteAddr().String()))
+
+	return nil
+}
+
+func (l *UDPAssociateListener) createSecureConnToSOCK5Server(ctx context.Context, conn net.Conn) (*crypto.SecureConn, error) {
+	// генерируем разделяемый секрет
+	key, err := crypto.GenerateSharedSecret(ctx, conn, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate shared secret: %v", err)
+	}
+
+	// устанавливаем защищенное соединение с socks5-сервером
+	secureConn, err := crypto.NewSecureConn(conn, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secure connection: %v", err)
+	}
+
+	return secureConn, nil
 }

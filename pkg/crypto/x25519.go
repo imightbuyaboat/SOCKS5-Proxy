@@ -1,16 +1,19 @@
 package crypto
 
 import (
+	"context"
 	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"net"
+	"time"
 
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
 	"golang.org/x/crypto/curve25519"
 )
 
-func GenerateSharedSecret(remoteConn net.Conn, initiator bool) ([]byte, error) {
+func GenerateSharedSecret(ctx context.Context, remoteConn net.Conn, initiator bool) ([]byte, error) {
 	var localPriv [32]byte
 	_, err := rand.Read(localPriv[:])
 	if err != nil {
@@ -25,25 +28,29 @@ func GenerateSharedSecret(remoteConn net.Conn, initiator bool) ([]byte, error) {
 	var remotePub [32]byte
 
 	if initiator {
-		_, err = remoteConn.Write(localPub)
-		if err != nil {
+		remoteConn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
+		if _, err = remoteConn.Write(localPub); err != nil {
 			return nil, fmt.Errorf("failed to send public key to %s: %v", remoteConn.RemoteAddr().String(), err)
 		}
+		remoteConn.SetWriteDeadline(time.Time{})
 
-		_, err = remoteConn.Read(remotePub[:])
-		if err != nil {
+		remoteConn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
+		if _, err = remoteConn.Read(remotePub[:]); err != nil {
 			return nil, fmt.Errorf("failed to recieve public key from %s: %v", remoteConn.RemoteAddr().String(), err)
 		}
+		remoteConn.SetReadDeadline(time.Time{})
 	} else {
-		_, err = remoteConn.Read(remotePub[:])
-		if err != nil {
+		remoteConn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
+		if _, err = remoteConn.Read(remotePub[:]); err != nil {
 			return nil, fmt.Errorf("failed to recieve public key from %s: %v", remoteConn.RemoteAddr().String(), err)
 		}
+		remoteConn.SetReadDeadline(time.Time{})
 
-		_, err = remoteConn.Write(localPub)
-		if err != nil {
+		remoteConn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
+		if _, err = remoteConn.Write(localPub); err != nil {
 			return nil, fmt.Errorf("failed to send public key to %s: %v", remoteConn.RemoteAddr().String(), err)
 		}
+		remoteConn.SetWriteDeadline(time.Time{})
 	}
 
 	sharedSecret, err := curve25519.X25519(localPriv[:], remotePub[:])

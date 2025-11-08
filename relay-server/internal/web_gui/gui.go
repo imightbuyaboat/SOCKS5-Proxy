@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -12,43 +11,54 @@ import (
 	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/udp"
 )
 
+type GUI interface {
+	Start() error
+	Shutdown(ctx context.Context) error
+}
+
 type WebGUI struct {
-	port int
-
-	temp *template.Template
-
-	listenerTCP *tcp.TCPAssociateListener
-	listenerUDP *udp.UDPAssociateListener
-
-	cancel context.CancelFunc
+	portStr     string
+	temp        *template.Template
+	tcpListener *tcp.TCPAssociateListener
+	udpListener *udp.UDPAssociateListener
+	srv         *http.Server
+	cancel      context.CancelFunc
 }
 
-func NewWebGUI(port int, listenerTCP *tcp.TCPAssociateListener, listenerUDP *udp.UDPAssociateListener) *WebGUI {
+func NewWebGUI(port int, tcpListener *tcp.TCPAssociateListener, udpListener *udp.UDPAssociateListener) GUI {
 	temp := template.Must(template.ParseFiles("template/index.html"))
+	portStr := fmt.Sprintf(":%d", port)
 
-	return &WebGUI{
-		port:        port,
+	webGui := &WebGUI{
+		portStr:     portStr,
 		temp:        temp,
-		listenerTCP: listenerTCP,
-		listenerUDP: listenerUDP,
+		tcpListener: tcpListener,
+		udpListener: udpListener,
 	}
-}
-
-func (g *WebGUI) Start() {
-	portStr := fmt.Sprintf(":%d", g.port)
 
 	r := mux.NewRouter()
-	r.HandleFunc("/", g.mainHandler).Methods("GET")
-	r.HandleFunc("/save", g.saveConfigHandler).Methods("POST")
-	r.HandleFunc("/start", g.startProxyHandler).Methods("POST")
-	r.HandleFunc("/stop", g.stopProxyHandler).Methods("POST")
-	r.HandleFunc("/logs", g.logsHandler).Methods("GET")
-	r.HandleFunc("/clear-logs", g.clearLogsHandler).Methods("POST")
+	r.HandleFunc("/", webGui.mainHandler).Methods("GET")
+	r.HandleFunc("/save", webGui.saveConfigHandler).Methods("POST")
+	r.HandleFunc("/start", webGui.startProxyHandler).Methods("POST")
+	r.HandleFunc("/stop", webGui.stopProxyHandler).Methods("POST")
+	r.HandleFunc("/logs", webGui.logsHandler).Methods("GET")
+	r.HandleFunc("/clear-logs", webGui.clearLogsHandler).Methods("POST")
 
 	fs := http.FileServer(http.Dir("./static"))
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
 
-	if err := http.ListenAndServe(portStr, r); err != nil {
-		log.Fatal(err)
+	webGui.srv = &http.Server{
+		Addr:    portStr,
+		Handler: r,
 	}
+
+	return webGui
+}
+
+func (g *WebGUI) Start() error {
+	return g.srv.ListenAndServe()
+}
+
+func (g *WebGUI) Shutdown(ctx context.Context) error {
+	return g.srv.Shutdown(ctx)
 }

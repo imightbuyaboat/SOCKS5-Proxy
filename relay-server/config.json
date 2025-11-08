@@ -1,0 +1,5 @@
+{
+    "tcp_relay_server_address": "0.0.0.0:1081",
+    "udp_relay_server_address": "0.0.0.0:1082",
+    "web_gui_port": 8081
+}

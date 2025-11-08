@@ -4,10 +4,22 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/user"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/models"
 )
 
-func ParseHandshake(req []byte, allowNoAuth bool) (byte, error) {
+type Parser interface {
+	ParseHandshake(req []byte, allowNoAuth bool) (byte, error)
+	ParseAuthRequest(req []byte) (*models.User, error)
+	ParseConnectRequest(req []byte) (byte, string, error)
+}
+
+type inMemoryParser struct{}
+
+func NewInMemoryParser() Parser {
+	return &inMemoryParser{}
+}
+
+func (p *inMemoryParser) ParseHandshake(req []byte, allowNoAuth bool) (byte, error) {
 	if len(req) < 3 {
 		return 0x00, fmt.Errorf("invalid handshake request")
 	}
@@ -43,7 +55,7 @@ func ParseHandshake(req []byte, allowNoAuth bool) (byte, error) {
 	return 0x00, ErrNoAcceptableMethods
 }
 
-func ParseAuthRequest(req []byte) (*user.User, error) {
+func (p *inMemoryParser) ParseAuthRequest(req []byte) (*models.User, error) {
 	if len(req) < 5 {
 		return nil, fmt.Errorf("invalid auth request")
 	}
@@ -65,13 +77,13 @@ func ParseAuthRequest(req []byte) (*user.User, error) {
 	}
 	passwd := req[3+uLen:]
 
-	return &user.User{
+	return &models.User{
 		Username: string(uName),
 		Password: string(passwd),
 	}, nil
 }
 
-func ParseConnectRequest(req []byte) (byte, string, error) {
+func (p *inMemoryParser) ParseConnectRequest(req []byte) (byte, string, error) {
 	if len(req) < 4 {
 		return 0x00, "", fmt.Errorf("invalid connect request")
 	}

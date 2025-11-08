@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/config"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/client/internal/config"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/validator"
 )
 
 func (g *WebGUI) mainHandler(w http.ResponseWriter, r *http.Request) {
@@ -15,7 +16,7 @@ func (g *WebGUI) mainHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *WebGUI) saveConfigHandler(w http.ResponseWriter, r *http.Request) {
-	var newConfig config.Config
+	var newConfig config.SOCKS5ListenerConfig
 
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&newConfig); err != nil {
@@ -29,7 +30,7 @@ func (g *WebGUI) saveConfigHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := config.ValidateAddress(newConfig.SOCKS5ServerAddress); err != nil {
+	if err := validator.ValidateAddress(newConfig.SOCKS5ServerAddress); err != nil {
 		response := map[string]interface{}{
 			"error":          "invalid socks5 address",
 			"current_config": g.listener.GetConfig(),
@@ -39,7 +40,7 @@ func (g *WebGUI) saveConfigHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	if err := config.ValidateAddress(newConfig.TCPRelayServerAddress); err != nil {
+	if err := validator.ValidateAddress(newConfig.TCPRelayServerAddress); err != nil {
 		response := map[string]interface{}{
 			"error":          "invalid tcp relay address",
 			"current_config": g.listener.GetConfig(),
@@ -49,7 +50,7 @@ func (g *WebGUI) saveConfigHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 		return
 	}
-	if err := config.ValidateAddress(newConfig.UDPRelayServerAddress); err != nil {
+	if err := validator.ValidateAddress(newConfig.UDPRelayServerAddress); err != nil {
 		response := map[string]interface{}{
 			"error":          "invalid udp relay address",
 			"current_config": g.listener.GetConfig(),
