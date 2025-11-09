@@ -2,6 +2,7 @@ package tcp
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"sync"
@@ -27,9 +28,6 @@ func NewTCPAssociateHandler(logger *zap.Logger) TCPAssociateHandler {
 }
 
 func (h *tcpAssociateHandler) HandleTCPAssociateConn(ctx context.Context, targetAddr string, remoteConn *crypto.SecureConn, conn net.Conn) {
-	defer conn.Close()
-	defer remoteConn.Close()
-
 	// отправляем целевой адрес и его длину
 	addrBytes := []byte(targetAddr)
 	length := byte(len(addrBytes))
@@ -71,40 +69,72 @@ func (h *tcpAssociateHandler) HandleTCPAssociateConn(ctx context.Context, target
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer remoteConn.Close()
 
-		_, err := io.Copy(remoteConn, conn)
-		remoteConn.CloseWrite()
-
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				h.logger.Debug("context closed")
-			default:
-				h.logger.Error("error while wrtiting to remote conn")
+		buf := make([]byte, 1024)
+		totalWritten := 0
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		for {
+			n, err := conn.Read(buf)
+			conn.SetReadDeadline(time.Time{})
+			if n > 0 {
+				h.logger.Debug("read from client", zap.String("client_address", conn.RemoteAddr().String()), zap.Int("bytes", n))
+				totalWritten += n
+				remoteConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if _, wErr := remoteConn.Write(buf[:n]); wErr != nil {
+					h.logger.Error("write to relay error", zap.Error(wErr))
+					return
+				}
+				remoteConn.SetWriteDeadline(time.Time{})
+				h.logger.Debug("wrote to relay", zap.Int("bytes", n))
 			}
-		} else {
-			h.logger.Debug("successfully write tcp packet to relay-server")
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					h.logger.Debug("EOF from client (end of request)", zap.String("client_address", conn.RemoteAddr().String()))
+				} else if errors.Is(err, context.DeadlineExceeded) {
+					h.logger.Warn("read from client timeout", zap.String("client_address", conn.RemoteAddr().String()))
+				} else {
+					h.logger.Error("read from client error", zap.Error(err), zap.String("client_address", conn.RemoteAddr().String()))
+				}
+				h.logger.Debug("total written to relay", zap.Int("bytes", totalWritten), zap.String("client_address", conn.RemoteAddr().String()))
+				return
+			}
 		}
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer conn.Close()
 
-		_, err := io.Copy(conn, remoteConn)
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			tcpConn.CloseWrite()
-		}
-
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				h.logger.Debug("context closed")
-			default:
-				h.logger.Error("error while wrtiting to conn")
+		buf := make([]byte, 1024)
+		totalRead := 0
+		remoteConn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		for {
+			n, err := remoteConn.Read(buf)
+			remoteConn.SetReadDeadline(time.Time{})
+			if n > 0 {
+				h.logger.Debug("read from relay", zap.Int("bytes", n))
+				totalRead += n
+				conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if _, wErr := conn.Write(buf[:n]); wErr != nil {
+					h.logger.Error("write to client error", zap.String("client_address", conn.RemoteAddr().String()), zap.Error(wErr))
+					return
+				}
+				conn.SetWriteDeadline(time.Time{})
+				h.logger.Debug("wrote to client", zap.Int("bytes", n), zap.String("client_address", conn.RemoteAddr().String()))
 			}
-		} else {
-			h.logger.Debug("successfully read tcp packet from relay-server")
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					h.logger.Debug("EOF from relay (normal close)")
+				} else if errors.Is(err, context.DeadlineExceeded) {
+					h.logger.Warn("read from relay timeout")
+				} else {
+					h.logger.Error("read from relay error", zap.Error(err))
+				}
+				h.logger.Debug("total read from relay", zap.Int("bytes", totalRead))
+				return
+			}
 		}
 	}()
 
@@ -119,5 +149,7 @@ func (h *tcpAssociateHandler) HandleTCPAssociateConn(ctx context.Context, target
 		h.logger.Debug("successfully read and write to relay-server")
 	case <-ctx.Done():
 		h.logger.Debug("context closed")
+	case <-time.After(60 * time.Second):
+		h.logger.Warn("timeout waiting for relay goroutines")
 	}
 }

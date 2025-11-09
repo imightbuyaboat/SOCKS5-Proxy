@@ -1,4 +1,4 @@
-FROM golang:1.24.4 AS builder
+FROM golang:1.24.7 AS builder
 
 WORKDIR /SOCKS5-proxy
 

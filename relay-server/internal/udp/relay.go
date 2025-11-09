@@ -2,7 +2,6 @@ package udp
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/constants"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/crypto"
 	"github.com/imightbuyaboat/SOCKS5-Proxy/pkg/udp_associate"
+	"github.com/imightbuyaboat/SOCKS5-Proxy/server/internal/conn_operations"
 	"go.uber.org/zap"
 )
 
@@ -17,13 +17,8 @@ func (l *UDPAssociateListener) handleUDPRelay(ctx context.Context, conn net.Conn
 	defer l.wg.Done()
 	defer conn.Close()
 
-	go func() {
-		<-ctx.Done()
-		conn.Close()
-	}()
-
 	// устанавливаем защищенное соединение с socks5-сервером
-	secureConn, err := l.createSecureConnToSOCK5Server(ctx, conn)
+	secureConn, err := conn_operations.UpgradeConnToSecureConn(ctx, conn)
 	if err != nil {
 		l.logger.Error("failed to create secure conn to SOCKS5 server",
 			zap.String("socks5_server_address", conn.RemoteAddr().String()),
@@ -78,8 +73,8 @@ func (l *UDPAssociateListener) handleUDPRelay(ctx context.Context, conn net.Conn
 			zap.Int("length", n),
 			zap.String("target_address", dstAddr))
 
-		// устанавливаем соедниние с целевым адресом
-		remoteConn, err := createRemoteUDPConnection(ctx, dstAddr)
+		// устанавливаем соединение с целевым адресом
+		remoteConn, err := conn_operations.CreateRemoteConnection(ctx, conn_operations.UDPNetwork, dstAddr)
 		if err != nil {
 			l.logger.Error("failed to create connection",
 				zap.String("target_address", dstAddr),
@@ -87,21 +82,14 @@ func (l *UDPAssociateListener) handleUDPRelay(ctx context.Context, conn net.Conn
 			return
 		}
 
-		err = l.handleSingleUDPExchange(ctx, secureConn, remoteConn, header, payload, dstAddr)
-		remoteConn.Close()
-
-		if err != nil {
+		if err = l.handleSingleUDPExchange(ctx, secureConn, remoteConn, header, payload, dstAddr); err != nil {
 			return
 		}
 	}
 }
 
 func (l *UDPAssociateListener) handleSingleUDPExchange(ctx context.Context, secureConn *crypto.SecureConn, remoteConn net.Conn, header *udp_associate.Socks5UDPAssociateHeader, payload []byte, dstAddr string) error {
-	// Закрываем remoteConn при отмене контекста
-	go func() {
-		<-ctx.Done()
-		remoteConn.Close()
-	}()
+	defer remoteConn.Close()
 
 	// отправляем полезную нагрузку
 	remoteConn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
@@ -152,20 +140,4 @@ func (l *UDPAssociateListener) handleSingleUDPExchange(ctx context.Context, secu
 		zap.String("socks5_server_address", secureConn.RemoteAddr().String()))
 
 	return nil
-}
-
-func (l *UDPAssociateListener) createSecureConnToSOCK5Server(ctx context.Context, conn net.Conn) (*crypto.SecureConn, error) {
-	// генерируем разделяемый секрет
-	key, err := crypto.GenerateSharedSecret(ctx, conn, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate shared secret: %v", err)
-	}
-
-	// устанавливаем защищенное соединение с socks5-сервером
-	secureConn, err := crypto.NewSecureConn(conn, key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create secure connection: %v", err)
-	}
-
-	return secureConn, nil
 }

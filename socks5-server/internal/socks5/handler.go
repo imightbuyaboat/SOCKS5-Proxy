@@ -20,7 +20,7 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 	buf := make([]byte, constants.BLOCK_SIZE)
 
 	// handshake request
-	s.setReadDeadline(conn, constants.ReadWriteTimeout)
+	conn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
 	n, err := conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read handshake request",
@@ -28,7 +28,7 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 			zap.Error(err))
 		return
 	}
-	s.clearReadDeadline(conn)
+	conn.SetReadDeadline(time.Time{})
 
 	s.logger.Debug("successfully read handhsake request",
 		zap.String("client_address", conn.RemoteAddr().String()))
@@ -59,7 +59,7 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 		zap.String("client_address", conn.RemoteAddr().String()))
 
 	// connect request
-	s.setReadDeadline(conn, constants.ReadWriteTimeout)
+	conn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
 	n, err = conn.Read(buf)
 	if err != nil {
 		s.logger.Error("failed to read connect request",
@@ -67,7 +67,7 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 			zap.Error(err))
 		return
 	}
-	s.clearReadDeadline(conn)
+	conn.SetReadDeadline(time.Time{})
 
 	s.logger.Debug("successfully read connect request",
 		zap.String("client_address", conn.RemoteAddr().String()))
@@ -109,6 +109,7 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 			zap.Error(err))
 		return
 	}
+	defer secureRemoteConn.Close()
 
 	s.logger.Info("successfully create secure remote connection to relay-server",
 		zap.String("relay_server_address", remoteAddr))
@@ -126,31 +127,32 @@ func (s *SOCKS5Listener) handleConnection(ctx context.Context, conn net.Conn) {
 func (s *SOCKS5Listener) handleAuthMethod(ctx context.Context, conn net.Conn, method byte, buf []byte) error {
 	switch method {
 	case 0x00: // no auth
-		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		conn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
 		if _, err := conn.Write([]byte{0x05, 0x00}); err != nil {
 			s.logger.Error("failed to write no-auth response", zap.Error(err))
 			return err
 		}
-		s.clearWriteDeadline(conn)
+		conn.SetWriteDeadline(time.Time{})
 
 	case 0x02: // auth
-		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		conn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
 		if _, err := conn.Write([]byte{0x05, 0x02}); err != nil {
 			s.logger.Error("failed to write auth method response", zap.Error(err))
-			s.clearWriteDeadline(conn)
+			//s.clearWriteDeadline(conn)
 			return err
 		}
-		s.clearWriteDeadline(conn)
+		conn.SetWriteDeadline(time.Time{})
 
 		// read auth request
-		s.setReadDeadline(conn, constants.ReadWriteTimeout)
+		//s.setReadDeadline(conn, constants.ReadWriteTimeout)
+		conn.SetReadDeadline(time.Now().Add(constants.ReadWriteTimeout))
 		n, err := conn.Read(buf)
 		if err != nil {
 			s.logger.Error("failed to read auth request", zap.Error(err))
-			s.clearReadDeadline(conn)
+			conn.SetReadDeadline(time.Time{})
 			return err
 		}
-		s.clearReadDeadline(conn)
+		conn.SetReadDeadline(time.Time{})
 
 		user, err := s.p.ParseAuthRequest(buf[:n])
 		if err != nil {
@@ -166,13 +168,14 @@ func (s *SOCKS5Listener) handleAuthMethod(ctx context.Context, conn net.Conn, me
 		}
 
 		// send auth success
-		s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		//s.setWriteDeadline(conn, constants.ReadWriteTimeout)
+		conn.SetWriteDeadline(time.Now().Add(constants.ReadWriteTimeout))
 		if _, err := conn.Write([]byte{0x01, 0x00}); err != nil {
 			s.logger.Error("failed to write auth success response", zap.Error(err))
-			s.clearWriteDeadline(conn)
+			conn.SetWriteDeadline(time.Time{})
 			return err
 		}
-		s.clearWriteDeadline(conn)
+		conn.SetWriteDeadline(time.Time{})
 
 	default:
 		conn.Write([]byte{0x05, 0xFF})
@@ -192,30 +195,16 @@ func (s *SOCKS5Listener) createSecureRemoteConnToRelayServer(ctx context.Context
 	// генерируем ключ
 	key, err := crypto.GenerateSharedSecret(ctx, remoteConn, true)
 	if err != nil {
+		remoteConn.Close()
 		return nil, fmt.Errorf("failed to generate shared secret: %v", err)
 	}
 
 	// создаем защищенное подключение
 	secureRemoteConn, err := crypto.NewSecureConn(remoteConn, key)
 	if err != nil {
+		remoteConn.Close()
 		return nil, fmt.Errorf("failed to create secure connection to relay-server: %v", err)
 	}
 
 	return secureRemoteConn, nil
-}
-
-func (s *SOCKS5Listener) setReadDeadline(conn net.Conn, timeout time.Duration) {
-	conn.SetReadDeadline(time.Now().Add(timeout))
-}
-
-func (s *SOCKS5Listener) clearReadDeadline(conn net.Conn) {
-	conn.SetReadDeadline(time.Time{})
-}
-
-func (s *SOCKS5Listener) setWriteDeadline(conn net.Conn, timeout time.Duration) {
-	conn.SetWriteDeadline(time.Now().Add(timeout))
-}
-
-func (s *SOCKS5Listener) clearWriteDeadline(conn net.Conn) {
-	conn.SetWriteDeadline(time.Time{})
 }

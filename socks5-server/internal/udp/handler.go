@@ -28,9 +28,6 @@ func NewUDPAssociateHandler(logger *zap.Logger) UDPAssociateHandler {
 }
 
 func (h *udpAssociateHandler) HandleUDPAssociateConn(ctx context.Context, remoteConn *crypto.SecureConn, conn net.Conn) {
-	defer conn.Close()
-	defer remoteConn.Close()
-
 	// определяем адрес, с которого будем принимать UDP пакеты
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 	if err != nil {
